@@ -1,0 +1,188 @@
+// File: prisma/schema.prisma (Final Version with Purchase Order)
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextIndex"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ===============================================
+//  Enum: OrderStatus (สถานะของบิล)
+// ===============================================
+enum OrderStatus {
+  COMPLETED // ขายสำเร็จ (จ่ายเงินสด)
+  CREDIT    // ขายเชื่อ (รอชำระเงิน)
+  HELD      // พักบิล
+  CANCELLED // ยกเลิก
+}
+
+
+// VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+//  Model ใหม่สำหรับ "รับของเข้า" วางไว้บนสุด
+// VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
+
+// ===============================================
+//  Model: PurchaseOrder (ใบสั่งซื้อ/ใบรับของ)
+// ===============================================
+model PurchaseOrder {
+  id          Int                 @id @default(autoincrement())
+  poNumber    String              @unique // เลขที่ใบรับของ
+  notes       String?             @db.Text
+  totalCost   Float               // ต้นทุนรวม
+  createdAt   DateTime            @default(now())
+
+  // ความสัมพันธ์กับผู้ขาย
+  supplier    Supplier            @relation(fields: [supplierId], references: [id])
+  supplierId  Int
+
+  // รายการสินค้าในใบรับของ
+  items       PurchaseOrderItem[]
+}
+
+// ===============================================
+//  Model: PurchaseOrderItem (รายการสินค้าในใบรับของ)
+// ===============================================
+model PurchaseOrderItem {
+  id              Int           @id @default(autoincrement())
+  quantity        Int           // จำนวนที่รับเข้า
+  costPrice       Float         // ต้นทุนต่อหน่วย ณ ตอนที่รับ
+  
+  // ความสัมพันธ์กับใบรับของ
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrderId Int
+
+  // ความสัมพันธ์กับสินค้า
+  product         Product       @relation(fields: [productId], references: [id])
+  productId       Int
+}
+
+
+// ===============================================
+//  Model: Supplier (ข้อมูลผู้ขาย)
+// ===============================================
+model Supplier {
+  id             Int             @id @default(autoincrement())
+  code           String          @unique
+  name           String
+  taxId          String?
+  phone          String?
+  fax            String?
+  email          String?
+  address        String?         @db.Text
+  notes          String?         @db.Text
+  creditDays     Int?
+  paymentTerms   String?
+  imageUrl       String?
+  products       Product[]
+  purchaseOrders PurchaseOrder[] // ความสัมพันธ์กับ PurchaseOrder
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+// ===============================================
+//  Model: Customer (ข้อมูลลูกค้า/สมาชิก)
+// ===============================================
+model Customer {
+  id                   Int       @id @default(autoincrement())
+  memberCode           String    @unique
+  title                String?
+  firstName            String
+  lastName             String?
+  nationalId           String?   @unique
+  phone                String?
+  email                String?
+  dateOfBirth          DateTime?
+  taxId                String?
+  creditLimit          Float?
+  address              String?   @db.Text
+  shippingAddress      String?   @db.Text
+  notes                String?   @db.Text
+  imageUrl             String?
+  membershipExpiryDate DateTime?
+  orders               Order[]
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
+// ===============================================
+//  Model: Product (ข้อมูลสินค้า)
+// ===============================================
+model Product {
+  id                 Int                   @id @default(autoincrement())
+  name               String
+  alias              String?
+  barcode            String?               @unique
+  category           String?
+  unit               String?
+  costPrice          Float
+  retailPrice        Float
+  wholesalePrice     Float?
+  vatType            String?
+  stockQuantity      Int                   @default(0)
+  trackStock         Boolean               @default(true)
+  reorderPoint       Int?
+  purchaseLimit      Int?
+  shelfLocation      String?
+  expiryDate         DateTime?
+  points             Int?
+  notes              String?               @db.Text
+  imageUrl           String?
+  allowPriceEdit     Boolean               @default(false)
+  supplier           Supplier              @relation(fields: [supplierId], references: [id])
+  supplierId         Int
+  OrderItems         OrderItem[]
+  purchaseOrderItems PurchaseOrderItem[] // ความสัมพันธ์กับ PurchaseOrderItem
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  @@fulltext([name, alias, barcode])
+}
+
+// ===============================================
+//  Model: Order (ข้อมูลบิลการขาย)
+// ===============================================
+model Order {
+  id          Int         @id @default(autoincrement())
+  orderNumber String      @unique
+  total       Float
+  status      OrderStatus @default(COMPLETED)
+  createdAt   DateTime    @default(now())
+  customer    Customer?   @relation(fields: [customerId], references: [id])
+  customerId  Int?
+  items       OrderItem[]
+}
+
+// ===============================================
+//  Model: OrderItem (รายการสินค้าในบิล)
+// ===============================================
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  quantity  Int
+  price     Float
+  discount  Float   @default(0)
+  order     Order   @relation(fields: [orderId], references: [id])
+  orderId   Int
+  product   Product @relation(fields: [productId], references: [id])
+  productId Int
+}
+
+// ===============================================
+//  Models สำหรับ Authentication (Lucia Auth)
+// ===============================================
+model User {
+  id        String    @id
+  username  String    @unique
+  password  String
+  role      String    @default("USER")
+  sessions  Session[]
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
