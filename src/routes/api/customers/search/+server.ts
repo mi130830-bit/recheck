@@ -1,4 +1,4 @@
-// Path: src/routes/api/customers/search/+server.ts (ฉบับปรับปรุง)
+// Path: src/routes/api/customers/search/+server.ts (ฉบับแก้ไขตาม Schema จริง)
 
 import { db } from '$lib/server/db';
 import { json } from '@sveltejs/kit';
@@ -15,8 +15,9 @@ export const GET: RequestHandler = async ({ url }) => {
 		const customers = await db.customer.findMany({
 			where: {
 				OR: [
-					// [แก้ไข] ใช้ฟิลด์ 'name' ที่มีอยู่จริงเป็นหลักในการค้นหาชื่อ
-					{ name: { contains: query } },
+					// [แก้ไข] ค้นหาจาก firstName และ lastName ที่มีอยู่จริงใน Schema
+					{ firstName: { contains: query } },
+					{ lastName: { contains: query } },
 					{ phone: { contains: query } },
 					{ memberCode: { contains: query } }
 				]

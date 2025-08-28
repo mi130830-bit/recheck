@@ -1,4 +1,4 @@
-<!-- Path: src/routes/+page.svelte (ฉบับสมบูรณ์ แก้ไขล่าสุด) -->
+<!-- Path: src/routes/+page.svelte (ฉบับเต็มล่าสุด) -->
 
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
@@ -25,6 +25,45 @@
 
 	// State สำหรับบิลที่พักไว้
 	let loadedHeldBillId: number | null = null;
+	
+	// State สำหรับการเลือกด้วยคีย์บอร์ด
+	let highlightedIndex = -1;
+	
+	// State สำหรับวันที่และเวลา
+	let currentDate = '';
+	let currentTime = '';
+	let timer: NodeJS.Timeout;
+
+	// State สำหรับนับจำนวนบิลที่พัก (ตัวอย่าง)
+	let heldBillsCount = 0;
+
+	onMount(() => {
+		// ตั้งค่าให้เวลาอัปเดตทุกๆ 1 วินาที
+		timer = setInterval(() => {
+			const now = new Date();
+			// แยกการคำนวณวันที่และเวลา
+			currentDate = now.toLocaleDateString('th-TH', {
+				day: 'numeric',
+				month: 'long',
+				year: 'numeric',
+				calendar: 'buddhist'
+			});
+			currentTime = now.toLocaleTimeString('th-TH', {
+				hour: '2-digit',
+				minute: '2-digit',
+				second: '2-digit'
+			});
+		}, 1000);
+
+		// เรียกใช้ครั้งแรกทันที
+		const now = new Date();
+		currentDate = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', calendar: 'buddhist' });
+		currentTime = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+	});
+
+	onDestroy(() => {
+		clearInterval(timer);
+	});
 
 	// === ฟังก์ชันการทำงาน ===
 
@@ -34,6 +73,7 @@
 		productDebounceTimer = setTimeout(() => searchProducts(), 300);
 	}
 	async function searchProducts() {
+		highlightedIndex = -1;
 		if (productSearchQuery.trim().length === 0) {
 			productSearchResults = [];
 			return;
@@ -46,7 +86,7 @@
 			isLoading = false;
 		}
 	}
-
+	
 	// ค้นหาลูกค้า (เรียก API)
 	function handleCustomerSearchInput() {
 		clearTimeout(customerDebounceTimer);
@@ -84,9 +124,10 @@
 		} else {
 			cart = [...cart, { ...product, quantity: quantity, discount: 0 }];
 		}
-		cart = [...cart]; // Trigger reactivity
+		cart = [...cart];
 		productSearchQuery = '';
 		productSearchResults = [];
+		highlightedIndex = -1;
 	}
 
 	function removeFromCart(productId: number) {
@@ -106,15 +147,33 @@
 		}
 	}
 
+	// จัดการการกดปุ่ม
+	function handleKeydown(event: KeyboardEvent) {
+		if (productSearchResults.length === 0) return;
+
+		if (event.key === 'ArrowDown') {
+			event.preventDefault();
+			highlightedIndex = (highlightedIndex + 1) % productSearchResults.length;
+		} else if (event.key === 'ArrowUp') {
+			event.preventDefault();
+			highlightedIndex = (highlightedIndex - 1 + productSearchResults.length) % productSearchResults.length;
+		} else if (event.key === 'Enter') {
+			event.preventDefault();
+			if (highlightedIndex !== -1) {
+				addToCart(productSearchResults[highlightedIndex]);
+			} else {
+				addToCart(productSearchResults[0]);
+			}
+		}
+	}
+
 	// จัดการบิลและการจ่ายเงิน
 	async function handleCheckout(event: CustomEvent<{ paymentType: 'COMPLETED' | 'CREDIT' }>) {
-		// ... (ใส่ Logic การ checkout ที่คุณมี) ...
 		alert(`กำลังจะจ่ายเงินแบบ ${event.detail.paymentType}`);
 		resetSale();
 	}
 
 	async function handleHoldBill() {
-		// ... (ใส่ Logic การพักบิลที่คุณมี) ...
 		alert('พักบิลเรียบร้อย!');
 		resetSale();
 	}
@@ -127,6 +186,7 @@
 		customerSearchResults = [];
 		selectedCustomer = null;
 		loadedHeldBillId = null;
+		highlightedIndex = -1;
 	}
 
 	// การคำนวณยอดรวม (Reactive)
@@ -134,6 +194,8 @@
 	$: totalDiscount = cart.reduce((sum, item) => sum + Number(item.discount), 0);
 	$: grandTotal = subtotal - totalDiscount;
 </script>
+
+<!-- ========================= ส่วน HTML ========================= -->
 
 <div class="pos-grid" class:loading={isLoading}>
 	<!-- ==== คอลัมน์ซ้าย (Main Panel) ==== -->
@@ -144,7 +206,7 @@
 			<div class="customer-section">
 				{#if selectedCustomer}
 					<div class="customer-display">
-						<span><strong>ชื่อ:</strong> {selectedCustomer.name} ({selectedCustomer.phone || selectedCustomer.memberCode})</span>
+						<span><strong>ชื่อ:</strong> {selectedCustomer.firstName} {selectedCustomer.lastName || ''} ({selectedCustomer.phone || selectedCustomer.memberCode})</span>
 						<button on:click={clearSelectedCustomer} class="contrast outline small-btn">X</button>
 					</div>
 				{:else}
@@ -159,7 +221,7 @@
 							<div class="search-dropdown">
 								{#each customerSearchResults as customer (customer.id)}
 									<button class="customer-item" on:click={() => selectCustomer(customer)}>
-										{customer.name} - {customer.phone || customer.memberCode}
+										{customer.firstName} {customer.lastName || ''} - {customer.phone || customer.memberCode}
 									</button>
 								{/each}
 							</div>
@@ -173,11 +235,21 @@
 		<article class="product-card">
 			<header><strong>ข้อมูลสินค้า</strong></header>
 			<div class="product-search-bar">
-				<input type="search" placeholder="ค้นหาจากบาร์โค้ด/ชื่อสินค้า" bind:value={productSearchQuery} on:input={handleProductSearchInput} />
+				<input
+					type="search"
+					placeholder="ค้นหาจากบาร์โค้ด/ชื่อสินค้า"
+					bind:value={productSearchQuery}
+					on:input={handleProductSearchInput}
+					on:keydown={handleKeydown}
+				/>
 				{#if productSearchResults.length > 0}
 					<div class="search-dropdown">
-						{#each productSearchResults as product (product.id)}
-							<button class="product-item" on:click={() => addToCart(product)}>
+						{#each productSearchResults as product, i (product.id)}
+							<button
+								class="product-item"
+								class:highlighted={i === highlightedIndex}
+								on:click={() => addToCart(product)}
+							>
 								{product.name} - {product.retailPrice.toFixed(2)} บาท
 							</button>
 						{/each}
@@ -232,9 +304,15 @@
 	<div class="summary-panel">
 		<article class="summary-card">
 			<header class="summary-header">
-				<strong>{new Date().toLocaleDateString('th-TH', { year: '2-digit', month: 'short', day: 'numeric' })}</strong>
-				<button class="secondary outline compact" on:click={() => (showHeldBillsModal = true)}>บิลที่พักไว้</button>
+				<div class="date-time-section">
+					<strong class="date">{currentDate || '...'}</strong>
+					<span class="time">{currentTime || '...'}</span>
+				</div>
+				<button class="secondary outline" on:click={() => (showHeldBillsModal = true)}>
+					{heldBillsCount} รายการพักบิล
+				</button>
 			</header>
+
 			<div class="price-summary">
 				<span>ราคา</span><input type="text" value="฿{subtotal.toFixed(2)}" readonly />
 				<span>ภาษี</span><input type="text" value="฿0.00" readonly />
@@ -255,8 +333,9 @@
 
 <!-- Modals -->
 <PaymentModal bind:showModal={showPaymentModal} totalAmount={grandTotal} on:confirm={handleCheckout} on:close={() => (showPaymentModal = false)} />
-<HeldBillsModal bind:showModal={showHeldBillsModal} on:select={(e) => alert('Load bill: ' + e.detail.id)} on:close={() => (showHeldBills_Modal = false)} />
+<HeldBillsModal bind:showModal={showHeldBillsModal} on:select={(e) => alert('Load bill: ' + e.detail.id)} on:close={() => (showHeldBillsModal = false)} />
 
+<!-- ========================= ส่วน Style ========================= -->
 <style>
 	.pos-grid {
 		display: grid;
@@ -297,7 +376,8 @@
 		text-align: left;
 		padding: 0.75rem 1rem;
 		border: none;
-		background: none;
+		background-color: white;
+		color: black;
 		border-bottom: 1px solid var(--pico-card-border-color);
 		cursor: pointer;
 	}
@@ -306,9 +386,10 @@
 		border-bottom: none;
 	}
 	.customer-item:hover,
-	.product-item:hover {
+	.product-item:hover,
+	.product-item.highlighted {
 		background-color: var(--pico-primary-background);
-		color: var(--pico-primary-inverse);
+		color: white;
 	}
 	.customer-display {
 		display: flex;
@@ -347,15 +428,6 @@
 		padding: 0.25rem 0.5rem;
 		height: auto;
 	}
-	.price-summary {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		gap: 0.75rem;
-		align-items: center;
-	}
-	.price-summary input {
-		text-align: right;
-	}
 	.total-label {
 		font-weight: bold;
 		font-size: 1.1em;
@@ -378,5 +450,42 @@
 		grid-template-columns: 1fr 1fr;
 		gap: 0.5rem;
 		margin-top: 0.5rem;
+	}
+	
+	/* --- โค้ดสำหรับแก้ไข Sidebar --- */
+
+	.summary-header {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 1.5rem;
+		padding-bottom: 1rem;
+		border-bottom: 1px solid var(--pico-muted-border-color);
+	}
+	.date-time-section {
+		text-align: center;
+	}
+	.date {
+		font-size: 1.1em;
+		font-weight: 600;
+	}
+	.time {
+		font-size: 1em;
+		color: var(--pico-muted-color);
+	}
+	.summary-header button {
+		width: 100%;
+	}
+	.price-summary {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.75rem;
+		align-items: center;
+	}
+	.price-summary input {
+		text-align: right;
+		border-radius: 20px;
+		padding: 0.5rem 1rem;
 	}
 </style>

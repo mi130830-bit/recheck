@@ -1,4 +1,4 @@
-// Path: src/routes/api/products/search/+server.ts (ฉบับแก้ไขที่ถูกต้อง)
+// Path: src/routes/api/products/search/+server.ts (ฉบับแก้ไขตาม Schema จริง)
 
 import { db } from '$lib/server/db';
 import { json } from '@sveltejs/kit';
@@ -14,21 +14,19 @@ export const GET: RequestHandler = async ({ url }) => {
 	try {
 		const products = await db.product.findMany({
 			where: {
-				// ใช้ AND เพื่อให้เงื่อนไขทั้งสองอย่างเป็นจริง
 				AND: [
-					// เงื่อนไขที่ 1: สต็อกต้องมากกว่า 0
 					{
-						// [แก้ไข] เปลี่ยนจาก stock เป็น stockQuantity
+						// [แก้ไข] ใช้ชื่อคอลัมน์ 'stockQuantity' ที่ถูกต้อง
 						stockQuantity: {
 							gt: 0
 						}
 					},
-					// เงื่อนไขที่ 2: ต้องตรงกับคำค้นหาในฟิลด์ใดฟิลด์หนึ่ง
 					{
 						OR: [
 							{ name: { contains: query } },
 							{ barcode: { contains: query } },
-							{ code: { contains: query } }
+							// [แก้ไข] ลบ 'code' ที่ไม่มีอยู่จริงออก และเพิ่ม 'alias' ที่มีใน Schema เข้าไป
+							{ alias: { contains: query } }
 						]
 					}
 				]
