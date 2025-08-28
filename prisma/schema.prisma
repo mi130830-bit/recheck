@@ -104,6 +104,7 @@ model Customer {
   imageUrl             String?
   membershipExpiryDate DateTime?
   orders               Order[]
+  billingNotes         BillingNote[]
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 }
@@ -153,6 +154,7 @@ model Order {
   customer    Customer?   @relation(fields: [customerId], references: [id])
   customerId  Int?
   items       OrderItem[]
+  billingNoteItem BillingNoteItem?
 }
 
 // ===============================================
@@ -185,4 +187,36 @@ model Session {
   expiresAt DateTime
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ===============================================
+//  [เพิ่มใหม่] Model: BillingNote (ใบวางบิล/ใบแจ้งหนี้)
+// ===============================================
+model BillingNote {
+  id          Int               @id @default(autoincrement())
+  bnNumber    String            @unique // เลขที่ใบวางบิล
+  totalAmount Float             // ยอดรวมของใบวางบิล
+  createdAt   DateTime          @default(now())
+
+  // ความสัมพันธ์กับลูกค้า
+  customer    Customer          @relation(fields: [customerId], references: [id])
+  customerId  Int
+
+  // รายการบิลที่อยู่ในใบวางบิลนี้
+  items       BillingNoteItem[]
+}
+
+// ===============================================
+//  [เพิ่มใหม่] Model: BillingNoteItem (รายการบิลในใบวางบิล)
+// ===============================================
+model BillingNoteItem {
+  id            Int         @id @default(autoincrement())
+
+  // ความสัมพันธ์กับใบวางบิล
+  billingNote   BillingNote @relation(fields: [billingNoteId], references: [id])
+  billingNoteId Int
+
+  // ความสัมพันธ์กับบิลเดิม
+  order         Order       @relation(fields: [orderId], references: [id])
+  orderId       Int         @unique // 1 บิล สามารถอยู่ในใบวางบิลได้แค่ 1 ใบ
 }
