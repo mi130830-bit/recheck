@@ -1,4 +1,4 @@
-<!-- Path: src/routes/+page.svelte (ฉบับเต็มล่าสุด) -->
+<!-- Path: src/routes/+page.svelte (ฉบับแก้ไข ReferenceError) -->
 
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
@@ -25,10 +25,10 @@
 
 	// State สำหรับบิลที่พักไว้
 	let loadedHeldBillId: number | null = null;
-	
+
 	// State สำหรับการเลือกด้วยคีย์บอร์ด
 	let highlightedIndex = -1;
-	
+
 	// State สำหรับวันที่และเวลา
 	let currentDate = '';
 	let currentTime = '';
@@ -38,24 +38,11 @@
 	let heldBillsCount = 0;
 
 	onMount(() => {
-		// ตั้งค่าให้เวลาอัปเดตทุกๆ 1 วินาที
 		timer = setInterval(() => {
 			const now = new Date();
-			// แยกการคำนวณวันที่และเวลา
-			currentDate = now.toLocaleDateString('th-TH', {
-				day: 'numeric',
-				month: 'long',
-				year: 'numeric',
-				calendar: 'buddhist'
-			});
-			currentTime = now.toLocaleTimeString('th-TH', {
-				hour: '2-digit',
-				minute: '2-digit',
-				second: '2-digit'
-			});
+			currentDate = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', calendar: 'buddhist' });
+			currentTime = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 		}, 1000);
-
-		// เรียกใช้ครั้งแรกทันที
 		const now = new Date();
 		currentDate = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', calendar: 'buddhist' });
 		currentTime = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -67,7 +54,6 @@
 
 	// === ฟังก์ชันการทำงาน ===
 
-	// ค้นหาสินค้า (เรียก API)
 	function handleProductSearchInput() {
 		clearTimeout(productDebounceTimer);
 		productDebounceTimer = setTimeout(() => searchProducts(), 300);
@@ -87,7 +73,6 @@
 		}
 	}
 	
-	// ค้นหาลูกค้า (เรียก API)
 	function handleCustomerSearchInput() {
 		clearTimeout(customerDebounceTimer);
 		customerDebounceTimer = setTimeout(() => searchCustomers(), 300);
@@ -116,7 +101,6 @@
 		selectedCustomer = null;
 	}
 
-	// จัดการตะกร้าสินค้า
 	function addToCart(product: Product, quantity = 1) {
 		const existingItem = cart.find((item) => item.id === product.id);
 		if (existingItem) {
@@ -146,11 +130,15 @@
 			}
 		}
 	}
+	
+	function updateQuantity(itemIndex: number, newQuantityStr: string) {
+		const newQuantity = parseInt(newQuantityStr) || 1;
+		cart[itemIndex].quantity = Math.max(1, newQuantity);
+		cart = cart;
+	}
 
-	// จัดการการกดปุ่ม
 	function handleKeydown(event: KeyboardEvent) {
 		if (productSearchResults.length === 0) return;
-
 		if (event.key === 'ArrowDown') {
 			event.preventDefault();
 			highlightedIndex = (highlightedIndex + 1) % productSearchResults.length;
@@ -167,17 +155,45 @@
 		}
 	}
 
-	// จัดการบิลและการจ่ายเงิน
-	async function handleCheckout(event: CustomEvent<{ paymentType: 'COMPLETED' | 'CREDIT' }>) {
-		alert(`กำลังจะจ่ายเงินแบบ ${event.detail.paymentType}`);
-		resetSale();
+	async function handleCheckout(event: CustomEvent<{ paymentType: 'COMPLETED' | 'CREDIT'; received: number; change: number }>) {
+		const { paymentType, received, change } = event.detail;
+		if (cart.length === 0) return;
+		if (paymentType === 'CREDIT' && !selectedCustomer) {
+			alert('กรุณาเลือกสมาชิกก่อนทำการขายเชื่อ');
+			return;
+		}
+		isLoading = true;
+		try {
+			const payload = {
+				cart: cart.map((item) => ({ id: item.id, quantity: item.quantity, retailPrice: item.retailPrice, discount: item.discount })),
+				total: grandTotal,
+				customerId: selectedCustomer ? selectedCustomer.id : null,
+				paymentType: paymentType,
+				received: received,
+				change: change
+			};
+			const response = await fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+			if (response.ok) {
+				const newOrder = await response.json();
+				alert(`บันทึกการขายสำเร็จ! (เลขที่บิล: ${newOrder.orderNumber})`);
+				resetSale();
+			} else {
+				const error = await response.json();
+				alert(`เกิดข้อผิดพลาด: ${error.message}`);
+			}
+		} catch (error) {
+			console.error('Checkout error:', error);
+			alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+		} finally {
+			isLoading = false;
+			showPaymentModal = false;
+		}
 	}
 
 	async function handleHoldBill() {
 		alert('พักบิลเรียบร้อย!');
 		resetSale();
 	}
-
 	function resetSale() {
 		cart = [];
 		productSearchQuery = '';
@@ -189,9 +205,8 @@
 		highlightedIndex = -1;
 	}
 
-	// การคำนวณยอดรวม (Reactive)
 	$: subtotal = cart.reduce((sum, item) => sum + item.retailPrice * item.quantity, 0);
-	$: totalDiscount = cart.reduce((sum, item) => sum + Number(item.discount), 0);
+	$: totalDiscount = cart.reduce((sum, item) => sum + Number(item.discount) * item.quantity, 0);
 	$: grandTotal = subtotal - totalDiscount;
 </script>
 
@@ -266,7 +281,7 @@
 							<th>ชื่อสินค้า</th>
 							<th>จำนวน</th>
 							<th>ราคา</th>
-							<th>ส่วนลด</th>
+							<th>ส่วนลด/หน่วย</th>
 							<th>รวม</th>
 							<th>ลบ</th>
 						</tr>
@@ -283,13 +298,13 @@
 									<td>
 										<div class="quantity-control">
 											<button on:click={() => adjustQuantity(item.id, -1)} class="outline secondary small-btn">-</button>
-											<span>{item.quantity}</span>
+											<input type="number" class="quantity-input" value={item.quantity} min="1" on:input={(e) => updateQuantity(i, e.currentTarget.value)} />
 											<button on:click={() => adjustQuantity(item.id, 1)} class="outline secondary small-btn">+</button>
 										</div>
 									</td>
 									<td>{item.retailPrice.toFixed(2)}</td>
 									<td><input type="number" bind:value={item.discount} min="0" class="discount-input" /></td>
-									<td>{(item.retailPrice * item.quantity - item.discount).toFixed(2)}</td>
+									<td>{((item.retailPrice - item.discount) * item.quantity).toFixed(2)}</td>
 									<td><button on:click={() => removeFromCart(item.id)} class="contrast outline small-btn">X</button></td>
 								</tr>
 							{/each}
@@ -331,7 +346,7 @@
 	</div>
 </div>
 
-<!-- Modals -->
+<!-- [แก้ไข] Modals - ใช้ bind:showModal และชื่อตัวแปรที่ถูกต้อง -->
 <PaymentModal bind:showModal={showPaymentModal} totalAmount={grandTotal} on:confirm={handleCheckout} on:close={() => (showPaymentModal = false)} />
 <HeldBillsModal bind:showModal={showHeldBillsModal} on:select={(e) => alert('Load bill: ' + e.detail.id)} on:close={() => (showHeldBillsModal = false)} />
 
@@ -402,7 +417,7 @@
 	.table-container {
 		max-height: 45vh;
 		overflow-y: auto;
-		margin-top: 1rem;
+		margin-top: 1.5rem;
 	}
 	table {
 		margin-bottom: 0;
@@ -412,15 +427,32 @@
 		padding: 2rem;
 		color: var(--pico-muted-color);
 	}
+	tbody td {
+		vertical-align: middle;
+	}
 	.quantity-control {
 		display: flex;
-		align-items: center;
+		align-items: baseline;
 		justify-content: center;
 		gap: 0.5rem;
 	}
 	.small-btn {
 		padding: 0.25rem 0.5rem;
 		line-height: 1;
+	}
+	.quantity-input {
+		width: 80px;
+		text-align: center;
+		border: none;
+		background-color: transparent;
+		padding: 0.25rem 0;
+		line-height: 1;
+		-moz-appearance: textfield;
+	}
+	.quantity-input::-webkit-outer-spin-button,
+	.quantity-input::-webkit-inner-spin-button {
+		-webkit-appearance: none;
+		margin: 0;
 	}
 	.discount-input {
 		max-width: 80px;
@@ -451,9 +483,6 @@
 		gap: 0.5rem;
 		margin-top: 0.5rem;
 	}
-	
-	/* --- โค้ดสำหรับแก้ไข Sidebar --- */
-
 	.summary-header {
 		display: flex;
 		flex-direction: column;

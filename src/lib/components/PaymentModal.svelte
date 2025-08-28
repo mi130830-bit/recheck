@@ -1,104 +1,108 @@
-<!-- File: src/lib/components/PaymentModal.svelte (ฉบับแก้ไข A11y) -->
+<!-- Path: src/lib/components/PaymentModal.svelte (ฉบับอัปเกรด) -->
+
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher } from 'svelte';
 
-  export let totalAmount = 0;
-  export let showModal = false;
+	export let showModal: boolean;
+	export let totalAmount: number;
 
-  let cashReceived = '';
-  let change = 0;
+	let receivedAmount: number | null = null;
 
-  const dispatch = createEventDispatcher();
+	const dispatch = createEventDispatcher();
 
-  function calculateChange() {
-    const received = parseFloat(cashReceived);
-    if (!isNaN(received) && received >= totalAmount) {
-      change = received - totalAmount;
-    } else {
-      change = 0;
-    }
-  }
+	// คำนวณเงินทอนแบบ Real-time
+	$: changeAmount = receivedAmount && receivedAmount > totalAmount ? receivedAmount - totalAmount : 0;
 
-  function confirmCreditSale() {
-    dispatch('confirm', { paymentType: 'CREDIT' });
-  }
+	function handleConfirm() {
+		// ส่ง event 'confirm' กลับไป พร้อมข้อมูลที่จำเป็น
+		dispatch('confirm', {
+			paymentType: 'COMPLETED',
+			received: receivedAmount || totalAmount, // ถ้าไม่กรอก ให้ถือว่ารับมาพอดี
+			change: changeAmount
+		});
+	}
 
-  function confirmCashPayment() {
-    if (parseFloat(cashReceived) >= totalAmount) {
-      dispatch('confirm', { paymentType: 'COMPLETED' });
-    } else {
-      alert('จำนวนเงินที่รับมาไม่เพียงพอ');
-    }
-  }
+	function handleCreditSale() {
+		// ส่ง event 'confirm' กลับไป บอกว่าเป็นขายเชื่อ
+		dispatch('confirm', {
+			paymentType: 'CREDIT',
+			received: 0,
+			change: 0
+		});
+	}
 
-  function closeModal() {
-    cashReceived = '';
-    change = 0;
-    dispatch('close');
-  }
-  
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') closeModal();
-    if (event.key === 'Enter' && cashReceived) confirmCashPayment();
-  }
-
-  $: if (cashReceived) calculateChange();
+	function closeModal() {
+		dispatch('close');
+	}
 </script>
 
-<svelte:window on:keydown={handleKeydown}/>
-
 {#if showModal}
-  <dialog open on:close={closeModal} on:click|self={closeModal}>
-    <!-- VVVVVV ลบ on:click|stopPropagation ออกจาก article VVVVVV -->
-    <article>
-      <header>
-        <button aria-label="Close" class="close" on:click={closeModal}></button>
-        <h3>รับเงิน / คำนวณเงินทอน</h3>
-      </header>
-      
-      <div class="summary">
-        <span>ยอดชำระทั้งหมด:</span>
-        <strong class="total-display">{totalAmount.toFixed(2)} บาท</strong>
-      </div>
+	<dialog open on:close={closeModal}>
+		<article>
+			<header>
+				<button aria-label="Close" class="close" on:click={closeModal}></button>
+				<strong>รับเงิน / คำนวณเงินทอน</strong>
+			</header>
 
-      <label for="cashReceived">
-        รับเงินมา
-        <input 
-          type="number" 
-          id="cashReceived" 
-          bind:value={cashReceived}
-          placeholder="กรอกจำนวนเงินที่รับ"
-          step="any"
-          autocomplete="off"
-        />
-      </label>
-      
-      <div class="summary">
-        <span>เงินทอน:</span>
-        <strong class="change-display">{change.toFixed(2)} บาท</strong>
-      </div>
+			<div class="modal-body">
+				<div class="summary-row">
+					<span>ยอดชำระทั้งหมด:</span>
+					<span class="total">{totalAmount.toFixed(2)} บาท</span>
+				</div>
+				
+				<label for="received">
+					รับเงินมา
+					<input
+						type="number"
+						id="received"
+						placeholder="กรอกจำนวนเงินที่รับ"
+						bind:value={receivedAmount}
+						min={totalAmount}
+					/>
+				</label>
+				
+				<div class="summary-row">
+					<span>เงินทอน:</span>
+					<span class="change">{changeAmount.toFixed(2)} บาท</span>
+				</div>
+			</div>
 
-      <footer>
-        <div class="button-group">
-            <button on:click={confirmCashPayment} disabled={!cashReceived || parseFloat(cashReceived) < totalAmount}>
-                ยืนยันการชำระเงิน (เงินสด)
-            </button>
-            <button on:click={confirmCreditSale} class="secondary">
-                บันทึกเป็นขายเชื่อ
-            </button>
-        </div>
-      </footer>
-    </article>
-  </dialog>
+			<footer>
+				<button on:click={handleConfirm} disabled={!receivedAmount || receivedAmount < totalAmount}>
+					ยืนยันการชำระเงิน (เงินสด)
+				</button>
+				<button class="secondary" on:click={handleCreditSale}>บันทึกเป็นขายเชื่อ</button>
+			</footer>
+		</article>
+	</dialog>
 {/if}
 
 <style>
-  dialog { max-width: 450px; border: none; padding: 0; box-shadow: 0 0 2rem rgba(0, 0, 0, 0.2); }
-  dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
-  .close { position: absolute; top: 0.5rem; right: 0.5rem; }
-  .summary { display: flex; justify-content: space-between; align-items: center; margin: 1rem 0; padding: 1rem; background-color: var(--pico-muted-background-color); }
-  .total-display, .change-display { font-size: 1.5em; font-weight: bold; }
-  .change-display { color: var(--pico-color-green-500); }
-  .button-group { display: grid; gap: 1rem; }
-  .button-group button { width: 100%; }
+	.modal-body {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+	.summary-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+	}
+	.total {
+		font-size: 1.5em;
+		font-weight: bold;
+	}
+	.change {
+		font-size: 1.2em;
+		font-weight: bold;
+		color: var(--pico-primary);
+	}
+	footer {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	footer button {
+		width: 100%;
+	}
 </style>

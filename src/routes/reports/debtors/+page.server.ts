@@ -1,66 +1,43 @@
-// File: src/routes/reports/debtors/+page.server.ts
+// Path: src/routes/reports/debtors/+page.server.ts (ฉบับแก้ไข)
 
-import { PrismaClient } from '@prisma/client';
+import { db } from '$lib/server/db';
+import type { PageServerLoad } from './$types';
 
-const prisma = new PrismaClient();
+export const load: PageServerLoad = async () => {
+	// 1. หายอดรวมและจำนวนบิลที่ค้างชำระของลูกค้าแต่ละคน
+	const debtorsAggregates = await db.order.groupBy({
+		by: ['customerId'], // จัดกลุ่มตาม ID ของลูกค้า
+		where: {
+			status: 'CREDIT' // เอาเฉพาะบิลที่เป็นหนี้
+		},
+		_count: {
+			id: true // นับจำนวนบิล (ตั้งชื่อเล่นว่า id)
+		},
+		_sum: {
+			total: true // รวมยอดเงินทั้งหมด
+		}
+	});
 
-export async function load() {
-  // --- Prisma Query เพื่อสรุปยอดหนี้ของลูกค้าแต่ละคน ---
-  const debtorsSummary = await prisma.order.groupBy({
-    by: ['customerId'], // 1. จัดกลุ่มตาม ID ของลูกค้า
-    where: {
-      status: 'CREDIT', // 2. เอาเฉพาะบิลที่เป็น "ขายเชื่อ"
-      customerId: {
-        not: null, // และต้องเป็นบิลที่ผูกกับลูกค้าเท่านั้น
-      },
-    },
-    _sum: {
-      total: true, // 3. คำนวณ "ผลรวม" ของยอดบิลในแต่ละกลุ่ม
-    },
-    _count: {
-      _all: true, // 4. "นับจำนวน" บิลในแต่ละกลุ่ม
-    },
-    orderBy: {
-      _sum: {
-        total: 'desc', // 5. เรียงจากลูกหนี้ที่มียอดค้างชำระสูงสุด
-      },
-    },
-  });
+	// 2. ดึงข้อมูลลูกค้าที่มีหนี้ค้าง
+	const customerIds = debtorsAggregates.map((d) => d.customerId).filter(Boolean) as number[];
+	
+	const customers = await db.customer.findMany({
+		where: {
+			id: {
+				in: customerIds
+			}
+		}
+	});
 
-  // ตอนนี้ debtorsSummary จะมีหน้าตาแบบนี้:
-  // [ { customerId: 1, _sum: { total: 5000 }, _count: { _all: 3 } }, ... ]
+	// 3. นำข้อมูล 2 ส่วนมารวมกันเพื่อให้แสดงผลได้ง่าย
+	const debtors = customers.map((customer) => {
+		const aggregate = debtorsAggregates.find((agg) => agg.customerId === customer.id);
+		return {
+			...customer,
+			billCount: aggregate?._count.id || 0,
+			totalDebt: aggregate?._sum.total || 0
+		};
+	});
 
-  // ดึงข้อมูลลูกค้า (ชื่อ, โทรศัพท์) มาประกอบร่าง
-  if (debtorsSummary.length > 0) {
-    const customerIds = debtorsSummary.map(item => item.customerId as number);
-    
-    const customers = await prisma.customer.findMany({
-      where: {
-        id: { in: customerIds },
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-        memberCode: true,
-      }
-    });
-
-    // นำข้อมูล 2 ส่วนมาประกอบร่างกัน
-    const reportData = debtorsSummary.map(summary => {
-      const customerInfo = customers.find(c => c.id === summary.customerId);
-      return {
-        customerId: summary.customerId,
-        totalDebt: summary._sum.total,
-        billCount: summary._count._all,
-        customer: customerInfo,
-      };
-    });
-    
-    return { debtors: reportData };
-  }
-
-  // ถ้าไม่มีลูกหนี้เลย
-  return { debtors: [] };
-}
+	return { debtors };
+};
