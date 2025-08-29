@@ -1,11 +1,11 @@
-<!-- Path: src/routes/+page.svelte (ฉบับแก้ไขสมบูรณ์) -->
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import type { Product, Customer } from '@prisma/client';
+	import type { Product, Customer, Order, OrderItem } from '@prisma/client';
 	import PaymentModal from '$lib/components/PaymentModal.svelte';
 	import HeldBillsModal from '$lib/components/HeldBillsModal.svelte';
-	
-type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { product: Product })[] };
+
+	type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { product: Product })[] };
+
 	// State สำหรับการค้นหา
 	let productSearchQuery = '';
 	let customerSearchQuery = '';
@@ -22,6 +22,8 @@ type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { prod
 	// State สำหรับ Modal
 	let showPaymentModal = false;
 	let showHeldBillsModal = false;
+	let showSaleSuccessModal = false;
+	let newOrderId: number | null = null;
 
 	// State สำหรับบิลที่พักไว้
 	let loadedHeldBillId: number | null = null;
@@ -36,18 +38,15 @@ type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { prod
 	let timer: NodeJS.Timeout;
 
 	onMount(async () => {
-		// --- โค้ดนาฬิกา ---
 		timer = setInterval(() => {
 			const now = new Date();
 			currentDate = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', calendar: 'buddhist' });
 			currentTime = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 		}, 1000);
-		// เรียกครั้งแรกทันที
 		const now = new Date();
 		currentDate = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', calendar: 'buddhist' });
 		currentTime = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-		// --- [แก้ไข] ดึงจำนวนบิลที่พักไว้ตอนเริ่ม ---
 		try {
 			const response = await fetch('/api/orders/hold');
 			if (response.ok) {
@@ -65,108 +64,17 @@ type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { prod
 
 	// === ฟังก์ชันการทำงาน ===
 
-	function handleProductSearchInput() {
-		clearTimeout(productDebounceTimer);
-		productDebounceTimer = setTimeout(() => searchProducts(), 300);
-	}
-	async function searchProducts() {
-		highlightedIndex = -1;
-		if (productSearchQuery.trim().length === 0) {
-			productSearchResults = [];
-			return;
-		}
-		isLoading = true;
-		try {
-			const response = await fetch(`/api/products/search?q=${encodeURIComponent(productSearchQuery)}`);
-			if (response.ok) productSearchResults = await response.json();
-		} finally {
-			isLoading = false;
-		}
-	}
-	
-	function handleCustomerSearchInput() {
-		clearTimeout(customerDebounceTimer);
-		customerDebounceTimer = setTimeout(() => searchCustomers(), 300);
-	}
-	async function searchCustomers() {
-		if (customerSearchQuery.trim().length === 0) {
-			customerSearchResults = [];
-			return;
-		}
-		isLoading = true;
-		try {
-			const response = await fetch(`/api/customers/search?q=${encodeURIComponent(customerSearchQuery)}`);
-			if (response.ok) customerSearchResults = await response.json();
-		} finally {
-			isLoading = false;
-		}
-	}
-
-	function selectCustomer(customer: Customer) {
-		selectedCustomer = customer;
-		customerSearchQuery = '';
-		customerSearchResults = [];
-	}
-
-	function clearSelectedCustomer() {
-		selectedCustomer = null;
-	}
-
-	function addToCart(product: Product, quantity = 1) {
-		const existingItem = cart.find((item) => item.id === product.id);
-		if (existingItem) {
-			existingItem.quantity += quantity;
-		} else {
-			cart = [...cart, { ...product, quantity: quantity, discount: 0 }];
-		}
-		cart = [...cart];
-		productSearchQuery = '';
-		productSearchResults = [];
-		highlightedIndex = -1;
-	}
-
-	function removeFromCart(productId: number) {
-		cart = cart.filter((item) => item.id !== productId);
-	}
-
-	function adjustQuantity(productId: number, amount: number) {
-		const item = cart.find((i) => i.id === productId);
-		if (item) {
-			const newQuantity = item.quantity + amount;
-			if (newQuantity > 0) {
-				item.quantity = newQuantity;
-				cart = [...cart];
-			} else {
-				removeFromCart(productId);
-			}
-		}
-	}
-	
-	function updateQuantity(itemIndex: number, newQuantityStr: string) {
-		const newQuantity = parseInt(newQuantityStr) || 1;
-		if (newQuantity > 0) {
-			cart[itemIndex].quantity = newQuantity;
-			cart = [...cart];
-		}
-	}
-
-	function handleKeydown(event: KeyboardEvent) {
-		if (productSearchResults.length === 0) return;
-		if (event.key === 'ArrowDown') {
-			event.preventDefault();
-			highlightedIndex = (highlightedIndex + 1) % productSearchResults.length;
-		} else if (event.key === 'ArrowUp') {
-			event.preventDefault();
-			highlightedIndex = (highlightedIndex - 1 + productSearchResults.length) % productSearchResults.length;
-		} else if (event.key === 'Enter') {
-			event.preventDefault();
-			if (highlightedIndex !== -1) {
-				addToCart(productSearchResults[highlightedIndex]);
-			} else if (productSearchResults.length > 0) {
-                addToCart(productSearchResults[0]);
-            }
-		}
-	}
+	function handleProductSearchInput() { clearTimeout(productDebounceTimer); productDebounceTimer = setTimeout(() => searchProducts(), 300); }
+	async function searchProducts() { highlightedIndex = -1; if (productSearchQuery.trim().length === 0) { productSearchResults = []; return; } isLoading = true; try { const response = await fetch(`/api/products/search?q=${encodeURIComponent(productSearchQuery)}`); if (response.ok) productSearchResults = await response.json(); } finally { isLoading = false; } }
+	function handleCustomerSearchInput() { clearTimeout(customerDebounceTimer); customerDebounceTimer = setTimeout(() => searchCustomers(), 300); }
+	async function searchCustomers() { if (customerSearchQuery.trim().length === 0) { customerSearchResults = []; return; } isLoading = true; try { const response = await fetch(`/api/customers/search?q=${encodeURIComponent(customerSearchQuery)}`); if (response.ok) customerSearchResults = await response.json(); } finally { isLoading = false; } }
+	function selectCustomer(customer: Customer) { selectedCustomer = customer; customerSearchQuery = ''; customerSearchResults = []; }
+	function clearSelectedCustomer() { selectedCustomer = null; }
+	function addToCart(product: Product, quantity = 1) { const existingItem = cart.find((item) => item.id === product.id); if (existingItem) { existingItem.quantity += quantity; } else { cart = [...cart, { ...product, quantity: quantity, discount: 0 }]; } cart = [...cart]; productSearchQuery = ''; productSearchResults = []; highlightedIndex = -1; }
+	function removeFromCart(productId: number) { cart = cart.filter((item) => item.id !== productId); }
+	function adjustQuantity(productId: number, amount: number) { const item = cart.find((i) => i.id === productId); if (item) { const newQuantity = item.quantity + amount; if (newQuantity > 0) { item.quantity = newQuantity; cart = [...cart]; } else { removeFromCart(productId); } } }
+	function updateQuantity(itemIndex: number, newQuantityStr: string) { const newQuantity = parseInt(newQuantityStr) || 1; if (newQuantity > 0) { cart[itemIndex].quantity = newQuantity; cart = [...cart]; } }
+	function handleKeydown(event: KeyboardEvent) { if (productSearchResults.length === 0) return; if (event.key === 'ArrowDown') { event.preventDefault(); highlightedIndex = (highlightedIndex + 1) % productSearchResults.length; } else if (event.key === 'ArrowUp') { event.preventDefault(); highlightedIndex = (highlightedIndex - 1 + productSearchResults.length) % productSearchResults.length; } else if (event.key === 'Enter') { event.preventDefault(); if (highlightedIndex !== -1) { addToCart(productSearchResults[highlightedIndex]); } else if (productSearchResults.length > 0) { addToCart(productSearchResults[0]); } } }
 
 	async function handleCheckout(event: CustomEvent<{ paymentType: 'COMPLETED' | 'CREDIT'; received: number; change: number }>) {
 		const { paymentType, received, change } = event.detail;
@@ -178,17 +86,24 @@ type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { prod
 		isLoading = true;
 		try {
 			const payload = {
-				cart: cart.map((item) => ({ id: item.id, quantity: item.quantity, discount: item.discount })),
+				cart: cart.map((item) => ({
+					id: item.id,
+					quantity: Number(item.quantity),
+					retailPrice: Number(item.retailPrice), 
+					discount: Number(item.discount || 0)
+				})),
 				customerId: selectedCustomer ? selectedCustomer.id : null,
 				paymentType: paymentType,
 				received: received,
 				change: change
 			};
+
 			const response = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+			
 			if (response.ok) {
 				const newOrder = await response.json();
-				alert(`บันทึกการขายสำเร็จ! (เลขที่บิล: ${newOrder.orderNumber})`);
-				resetSale();
+				newOrderId = newOrder.id;
+				showSaleSuccessModal = true;
 			} else {
 				const error = await response.json();
 				alert(`เกิดข้อผิดพลาด: ${error.message}`);
@@ -202,29 +117,15 @@ type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { prod
 		}
 	}
 
-	// =============================================================
-	// [แก้ไขใหม่ทั้งหมด] ฟังก์ชันพักบิลที่ถูกต้อง
-	// =============================================================
 	async function handleHoldBill() {
 		if (cart.length === 0) return;
-		
 		isLoading = true;
 		try {
 			const payload = {
-				cart: cart.map((item) => ({ 
-					id: item.id, 
-					quantity: item.quantity, 
-					discount: item.discount 
-				})),
+				cart: cart.map((item) => ({ id: item.id, quantity: item.quantity, discount: item.discount })),
 				customerId: selectedCustomer ? selectedCustomer.id : null
 			};
-
-			const response = await fetch('/api/orders/hold', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(payload)
-			});
-
+			const response = await fetch('/api/orders/hold', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
 			if (response.ok) {
 				alert('พักบิลเรียบร้อย!');
 				heldBillsCount++; 
@@ -251,37 +152,34 @@ type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { prod
 		loadedHeldBillId = null;
 		highlightedIndex = -1;
 	}
+
 	function loadHeldBill(order: FullOrder) {
-		// 1. เคลียร์ตะกร้าเก่าก่อนเริ่ม (ใช้ resetSale แต่เก็บค่า modal ไว้)
 		resetSale();
-
-		// 2. นำข้อมูลลูกค้าจากบิลที่พักไว้มาใส่
 		selectedCustomer = order.customer;
-
-		// 3. แปลงรายการสินค้าในบิล (order.items) ให้เป็นรูปแบบของตะกร้า (cart)
 		const newCart = order.items.map(item => ({
-			...item.product, // เอาข้อมูลสินค้าทั้งหมดมา (name, price, barcode, etc.)
+			...item.product,
 			quantity: item.quantity,
-			discount: item.discount || 0 // ใช้ส่วนลดจากบิล ถ้าไม่มีให้เป็น 0
+			discount: item.discount || 0
 		}));
 		cart = newCart;
-		// 4. เก็บ ID ของบิลที่โหลดมาไว้ (สำคัญมากสำหรับขั้นตอนต่อไป เช่น การลบ/อัปเดต)
 		loadedHeldBillId = order.id;
-		// 5. ปิดหน้าต่าง Modal
 		showHeldBillsModal = false;
 	}
 
-	$: subtotal = cart.reduce((sum, item) => sum + item.retailPrice * item.quantity, 0);
+	function closeSuccessModalAndReset() {
+        showSaleSuccessModal = false;
+        newOrderId = null;
+        resetSale();
+    }
+
+	$: subtotal = cart.reduce((sum, item) => sum + Number(item.retailPrice) * item.quantity, 0);
 	$: totalDiscount = cart.reduce((sum, item) => sum + Number(item.discount || 0) * item.quantity, 0);
 	$: grandTotal = subtotal - totalDiscount;
 </script>
 
-<!-- ========================= ส่วน HTML ========================= -->
-
 <div class="pos-grid" class:loading={isLoading}>
 	<!-- ==== คอลัมน์ซ้าย (Main Panel) ==== -->
 	<div class="main-panel">
-		<!-- การ์ดข้อมูลสมาชิก -->
 		<article class="customer-card">
 			<header><strong>ข้อมูลสมาชิก</strong></header>
 			<div class="customer-section">
@@ -312,7 +210,6 @@ type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { prod
 			</div>
 		</article>
 
-		<!-- การ์ดข้อมูลสินค้าและตะกร้า -->
 		<article class="product-card">
 			<header><strong>ข้อมูลสินค้า</strong></header>
 			<div class="product-search-bar">
@@ -331,7 +228,7 @@ type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { prod
 								class:highlighted={i === highlightedIndex}
 								on:click={() => addToCart(product)}
 							>
-								{product.name} - {product.retailPrice.toFixed(2)} บาท
+								{product.name} - {Number(product.retailPrice).toFixed(2)} บาท
 							</button>
 						{/each}
 					</div>
@@ -368,9 +265,9 @@ type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { prod
 											<button on:click={() => adjustQuantity(item.id, 1)} class="outline secondary small-btn">+</button>
 										</div>
 									</td>
-									<td>{item.retailPrice.toFixed(2)}</td>
+									<td>{parseFloat(item.retailPrice).toFixed(2)}</td>
 									<td><input type="number" bind:value={item.discount} min="0" class="discount-input" /></td>
-									<td>{((item.retailPrice - item.discount) * item.quantity).toFixed(2)}</td>
+									<td>{((Number(item.retailPrice) - Number(item.discount || 0)) * item.quantity).toFixed(2)}</td>
 									<td><button on:click={() => removeFromCart(item.id)} class="contrast outline small-btn">X</button></td>
 								</tr>
 							{/each}
@@ -412,11 +309,30 @@ type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { prod
 	</div>
 </div>
 
-<!-- [แก้ไข] Modals - ใช้ bind:showModal และชื่อตัวแปรที่ถูกต้อง -->
 <PaymentModal bind:showModal={showPaymentModal} totalAmount={grandTotal} on:confirm={handleCheckout} on:close={() => (showPaymentModal = false)} />
 <HeldBillsModal bind:showModal={showHeldBillsModal} on:select={(event) => loadHeldBill(event.detail)} on:close={() => (showHeldBillsModal = false)} />
 
-<!-- ========================= ส่วน Style ========================= -->
+{#if showSaleSuccessModal}
+	<dialog open>
+		<article>
+			<header>
+				<a href="#close" aria-label="Close" class="close" on:click|preventDefault={closeSuccessModalAndReset}></a>
+				<strong>✅ บันทึกการขายสำเร็จ!</strong>
+			</header>
+			<p>คุณต้องการพิมพ์ใบเสร็จหรือไม่?</p>
+			<footer>
+				<div class="grid">
+					<a href="/receipts/{newOrderId}?size=a4" target="_blank" role="button" class="secondary">พิมพ์ (A4)</a>
+					<a href="/receipts/{newOrderId}?size=a5" target="_blank" role="button" class="secondary">พิมพ์ (A5)</a>
+					<a href="/receipts/{newOrderId}?size=slip" target="_blank" role="button" class="secondary outline">พิมพ์ (สลิป)</a>
+				</div>
+				<hr>
+				<button on:click={closeSuccessModalAndReset}>เริ่มการขายใหม่</button>
+			</footer>
+		</article>
+	</dialog>
+{/if}
+
 <style>
 	.pos-grid {
 		display: grid;

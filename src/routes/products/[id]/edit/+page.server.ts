@@ -26,26 +26,65 @@ export async function load({ params }) {
 export const actions = {
   update: async ({ request, params }) => {
     const data = await request.formData();
-    // ดึงข้อมูลทั้งหมดจากฟอร์ม (เหมือนกับในหน้า new)
+
+    // --- 1. ดึงข้อมูลจากฟอร์มให้ครบทุก field ---
     const name = data.get('name') as string;
-    // ... ดึงฟิลด์อื่นๆ ทั้งหมด ...
+    const alias = data.get('alias') as string | null;
+    const barcode = data.get('barcode') as string | null;
+    const category = data.get('category') as string | null;
+    const unit = data.get('unit') as string | null;
+    const costPrice = parseFloat(data.get('costPrice') as string);
+    const retailPrice = parseFloat(data.get('retailPrice') as string);
+    const wholesalePriceStr = data.get('wholesalePrice') as string;
+    const vatType = data.get('vatType') as string | null;
+    const stockQuantity = parseInt(data.get('stockQuantity') as string);
+    const trackStock = data.get('trackStock') === 'on'; // Checkbox value is 'on' when checked
+    const reorderPointStr = data.get('reorderPoint') as string;
+    const shelfLocation = data.get('shelfLocation') as string | null;
+    const expiryDateStr = data.get('expiryDate') as string;
+    const notes = data.get('notes') as string | null;
+    const allowPriceEdit = data.get('allowPriceEdit') === 'on';
     const supplierId = parseInt(data.get('supplierId') as string);
 
-    // ... (โค้ดแปลงชนิดข้อมูลเหมือนกับในหน้า new) ...
+        // --- 2. ตรวจสอบและแปลงชนิดข้อมูล ---
+    if (!name || isNaN(costPrice) || isNaN(retailPrice) || isNaN(stockQuantity) || isNaN(supplierId)) {
+      return fail(400, { message: 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน' });
+    }
+
+    const wholesalePrice = wholesalePriceStr ? parseFloat(wholesalePriceStr) : null;
+    const reorderPoint = reorderPointStr ? parseInt(reorderPointStr) : null;
+    const expiryDate = expiryDateStr ? new Date(expiryDateStr) : null;
     
     try {
+      // --- 3. อัปเดตข้อมูลในฐานข้อมูลให้ครบทุก field ---
       await prisma.product.update({
         where: { id: Number(params.id) },
         data: {
           name,
-          // ... ใส่ฟิลด์อื่นๆ ทั้งหมดที่จะอัปเดต ...
+          alias,
+          barcode,
+          category,
+          unit,
+          costPrice,
+          retailPrice,
+          wholesalePrice,
+          vatType,
+          stockQuantity,
+          trackStock,
+          reorderPoint,
+          shelfLocation,
+          expiryDate,
+          notes,
+          allowPriceEdit,
           supplierId,
         },
       });
     } catch (err) {
       console.error(err);
-      return fail(500, { message: 'เกิดข้อผิดพลาดในการอัปเดต' });
+      return fail(500, { message: 'เกิดข้อผิดพลาดในการอัปเดตข้อมูลสินค้า' });
     }
+
+    // --- 4. เมื่อสำเร็จ ให้ Redirect กลับไป ---
     throw redirect(303, '/products');
   },
 };

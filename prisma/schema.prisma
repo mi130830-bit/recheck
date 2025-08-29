@@ -20,11 +20,6 @@ enum OrderStatus {
   CANCELLED // ยกเลิก
 }
 
-
-// VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
-//  Model ใหม่สำหรับ "รับของเข้า" วางไว้บนสุด
-// VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV
-
 // ===============================================
 //  Model: PurchaseOrder (ใบสั่งซื้อ/ใบรับของ)
 // ===============================================
@@ -32,7 +27,7 @@ model PurchaseOrder {
   id          Int                 @id @default(autoincrement())
   poNumber    String              @unique // เลขที่ใบรับของ
   notes       String?             @db.Text
-  totalCost   Float               // ต้นทุนรวม
+  totalCost   Decimal               // ต้นทุนรวม
   createdAt   DateTime            @default(now())
 
   // ความสัมพันธ์กับผู้ขาย
@@ -49,7 +44,7 @@ model PurchaseOrder {
 model PurchaseOrderItem {
   id              Int           @id @default(autoincrement())
   quantity        Int           // จำนวนที่รับเข้า
-  costPrice       Float         // ต้นทุนต่อหน่วย ณ ตอนที่รับ
+  costPrice       Decimal         // ต้นทุนต่อหน่วย ณ ตอนที่รับ
   
   // ความสัมพันธ์กับใบรับของ
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
@@ -97,7 +92,7 @@ model Customer {
   email                String?
   dateOfBirth          DateTime?
   taxId                String?
-  creditLimit          Float?
+  creditLimit          Decimal?
   address              String?   @db.Text
   shippingAddress      String?   @db.Text
   notes                String?   @db.Text
@@ -119,9 +114,9 @@ model Product {
   barcode            String?               @unique
   category           String?
   unit               String?
-  costPrice          Float
-  retailPrice        Float
-  wholesalePrice     Float?
+  costPrice          Decimal
+  retailPrice        Decimal
+  wholesalePrice     Decimal?
   vatType            String?
   stockQuantity      Int                   @default(0)
   trackStock         Boolean               @default(true)
@@ -149,7 +144,9 @@ model Product {
 model Order {
   id              Int               @id @default(autoincrement())
   orderNumber     String            @unique
-  total           Float
+  total           Decimal
+  received        Decimal?            // <-- [เพิ่ม] เงินที่รับ
+  change          Decimal?            // <-- [เพิ่ม] เงินทอน
   status          OrderStatus       @default(COMPLETED)
   createdAt       DateTime          @default(now())
   customer        Customer?         @relation(fields: [customerId], references: [id])
@@ -165,8 +162,8 @@ model Order {
 model OrderItem {
   id               Int     @id @default(autoincrement())
   quantity         Int
-  price            Float
-  discount         Float   @default(0)
+  price            Decimal
+  discount         Decimal   @default(0)
   order            Order   @relation(fields: [orderId], references: [id])
   orderId          Int
   product          Product @relation(fields: [productId], references: [id])
@@ -229,7 +226,7 @@ model Session {
 model BillingNote {
   id          Int               @id @default(autoincrement())
   bnNumber    String            @unique // เลขที่ใบวางบิล
-  totalAmount Float             // ยอดรวมของใบวางบิล
+  totalAmount Decimal             // ยอดรวมของใบวางบิล
   createdAt   DateTime          @default(now())
 
   // ความสัมพันธ์กับลูกค้า
