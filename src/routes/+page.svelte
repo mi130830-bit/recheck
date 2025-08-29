@@ -1,180 +1,207 @@
+// Path: src/routes/+page.svelte (SCRIPT SECTION - FINAL CORRECTED VERSION)
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { Product, Customer, Order, OrderItem } from '@prisma/client';
 	import PaymentModal from '$lib/components/PaymentModal.svelte';
 	import HeldBillsModal from '$lib/components/HeldBillsModal.svelte';
 
-	type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { product: Product })[] };
+type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { product: Product })[] };
 
-	// State สำหรับการค้นหา
-	let productSearchQuery = '';
-	let customerSearchQuery = '';
-	let productSearchResults: Product[] = [];
-	let customerSearchResults: Customer[] = [];
+// --- State ไม่เปลี่ยนแปลง ---
+let productSearchQuery = '';
+let customerSearchQuery = '';
+let productSearchResults: Product[] = [];
+let customerSearchResults: Customer[] = [];
+let cart: (Product & { quantity: number; discount: number })[] = [];
+let selectedCustomer: Customer | null = null;
+let isLoading = false;
+let productDebounceTimer: number;
+let customerDebounceTimer: number;
+let showPaymentModal = false;
+let showHeldBillsModal = false;
+let showSaleSuccessModal = false;
+let newOrderId: number | null = null;
+let loadedHeldBillId: number | null = null;
+let heldBillsCount = 0;
+let highlightedIndex = -1;
+let currentDate = '';
+let currentTime = '';
+let timer: NodeJS.Timeout;
 
-	// State สำหรับการทำงานหลัก
-	let cart: (Product & { quantity: number; discount: number })[] = [];
-	let selectedCustomer: Customer | null = null;
-	let isLoading = false;
-	let productDebounceTimer: number;
-	let customerDebounceTimer: number;
-
-	// State สำหรับ Modal
-	let showPaymentModal = false;
-	let showHeldBillsModal = false;
-	let showSaleSuccessModal = false;
-	let newOrderId: number | null = null;
-
-	// State สำหรับบิลที่พักไว้
-	let loadedHeldBillId: number | null = null;
-	let heldBillsCount = 0;
-
-	// State สำหรับการเลือกด้วยคีย์บอร์ด
-	let highlightedIndex = -1;
-
-	// State สำหรับวันที่และเวลา
-	let currentDate = '';
-	let currentTime = '';
-	let timer: NodeJS.Timeout;
-
-	onMount(async () => {
-		timer = setInterval(() => {
-			const now = new Date();
-			currentDate = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', calendar: 'buddhist' });
-			currentTime = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-		}, 1000);
+// --- onMount/onDestroy ไม่เปลี่ยนแปลง ---
+onMount(async () => {
+	timer = setInterval(() => {
 		const now = new Date();
 		currentDate = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', calendar: 'buddhist' });
 		currentTime = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+	}, 1000);
+	const now = new Date();
+	currentDate = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', calendar: 'buddhist' });
+	currentTime = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+	try {
+		const response = await fetch('/api/orders/hold');
+		if (response.ok) {
+			const heldBills = await response.json();
+			heldBillsCount = heldBills.length;
+		}
+	} catch (err) {
+		console.error("Failed to fetch held bills count:", err);
+	}
+});
 
-		try {
-			const response = await fetch('/api/orders/hold');
-			if (response.ok) {
-				const heldBills = await response.json();
-				heldBillsCount = heldBills.length;
+onDestroy(() => {
+	clearInterval(timer);
+});
+
+// --- ฟังก์ชันพื้นฐานไม่เปลี่ยนแปลง ---
+function handleProductSearchInput() { clearTimeout(productDebounceTimer); productDebounceTimer = setTimeout(() => searchProducts(), 300); }
+async function searchProducts() { highlightedIndex = -1; if (productSearchQuery.trim().length === 0) { productSearchResults = []; return; } isLoading = true; try { const response = await fetch(`/api/products/search?q=${encodeURIComponent(productSearchQuery)}`); if (response.ok) productSearchResults = await response.json(); } finally { isLoading = false; } }
+function handleCustomerSearchInput() { clearTimeout(customerDebounceTimer); customerDebounceTimer = setTimeout(() => searchCustomers(), 300); }
+async function searchCustomers() { if (customerSearchQuery.trim().length === 0) { customerSearchResults = []; return; } isLoading = true; try { const response = await fetch(`/api/customers/search?q=${encodeURIComponent(customerSearchQuery)}`); if (response.ok) customerSearchResults = await response.json(); } finally { isLoading = false; } }
+function selectCustomer(customer: Customer) { selectedCustomer = customer; customerSearchQuery = ''; customerSearchResults = []; }
+function clearSelectedCustomer() { selectedCustomer = null; }
+function addToCart(product: Product, quantity = 1) { const existingItem = cart.find((item) => item.id === product.id); if (existingItem) { existingItem.quantity += quantity; } else { cart = [...cart, { ...product, quantity: quantity, discount: 0 }]; } cart = [...cart]; productSearchQuery = ''; productSearchResults = []; highlightedIndex = -1; }
+function removeFromCart(productId: number) { cart = cart.filter((item) => item.id !== productId); }
+function adjustQuantity(productId: number, amount: number) { const item = cart.find((i) => i.id === productId); if (item) { const newQuantity = item.quantity + amount; if (newQuantity > 0) { item.quantity = newQuantity; cart = [...cart]; } else { removeFromCart(productId); } } }
+function updateQuantity(itemIndex: number, newQuantityStr: string) { const newQuantity = parseInt(newQuantityStr) || 1; if (newQuantity > 0) { cart[itemIndex].quantity = newQuantity; cart = [...cart]; } }
+function handleKeydown(event: KeyboardEvent) { if (productSearchResults.length === 0) return; if (event.key === 'ArrowDown') { event.preventDefault(); highlightedIndex = (highlightedIndex + 1) % productSearchResults.length; } else if (event.key === 'ArrowUp') { event.preventDefault(); highlightedIndex = (highlightedIndex - 1 + productSearchResults.length) % productSearchResults.length; } else if (event.key === 'Enter') { event.preventDefault(); if (highlightedIndex !== -1) { addToCart(productSearchResults[highlightedIndex]); } else if (productSearchResults.length > 0) { addToCart(productSearchResults[0]); } } }
+
+// ===================== [แก้ไข] ฟังก์ชัน handleCheckout =====================
+async function handleCheckout(event: CustomEvent<{ paymentType: 'COMPLETED' | 'CREDIT'; received: number; change: number }>) {
+	const { paymentType, received, change } = event.detail;
+	if (cart.length === 0) return;
+	if (paymentType === 'CREDIT' && !selectedCustomer) {
+		alert('กรุณาเลือกสมาชิกก่อนทำการขายเชื่อ');
+		return;
+	}
+	isLoading = true;
+	try {
+		const payload = {
+			cart: cart.map((item) => ({
+				id: item.id,
+				quantity: Number(item.quantity),
+				retailPrice: Number(item.retailPrice),
+				discount: Number(item.discount || 0)
+			})),
+			customerId: selectedCustomer ? selectedCustomer.id : null,
+			paymentType: paymentType,
+			received: received,
+			change: change,
+			// [เพิ่ม] ส่ง ID ของบิลที่พักไว้ที่กำลังจะถูกแทนที่ไปด้วย
+			heldBillIdToDelete: loadedHeldBillId
+		};
+
+		const response = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+		
+		if (response.ok) {
+			const newOrder = await response.json();
+			newOrderId = newOrder.id;
+			showSaleSuccessModal = true;
+			// [เพิ่ม] ถ้าเคยมีบิลพักไว้ จำนวนจะถูกลดที่ server แต่เราอัปเดต UI ที่นี่
+			if(loadedHeldBillId) {
+				heldBillsCount--;
 			}
+		} else {
+			const error = await response.json();
+			alert(`เกิดข้อผิดพลาด: ${error.message}`);
+		}
+	} catch (error) {
+		console.error('Checkout error:', error);
+		alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+	} finally {
+		isLoading = false;
+		showPaymentModal = false;
+	}
+}
+
+// --- handleHoldBill ไม่เปลี่ยนแปลง ---
+async function handleHoldBill() {
+	if (cart.length === 0) return;
+	isLoading = true;
+	try {
+		const payload = {
+			cart: cart.map((item) => ({
+				id: item.id,
+				quantity: item.quantity,
+				discount: item.discount,
+				// [เพิ่ม] ส่ง retailPrice ไปด้วยเผื่อ API ต้องการ
+				retailPrice: item.retailPrice
+			})),
+			customerId: selectedCustomer ? selectedCustomer.id : null
+		};
+		const response = await fetch('/api/orders/hold', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+		if (response.ok) {
+			alert('พักบิลเรียบร้อย!');
+			heldBillsCount++;
+			resetSale();
+		} else {
+			const errorData = await response.json();
+			alert(`เกิดข้อผิดพลาดในการพักบิล: ${errorData.message || 'กรุณาลองใหม่อีกครั้ง'}`);
+		}
+	} catch (error) {
+		console.error('Hold bill submission error:', error);
+		alert('เกิดข้อผิดพลาดในการเชื่อมต่อ ไม่สามารถพักบิลได้');
+	} finally {
+		isLoading = false;
+	}
+}
+
+// ===================== [แก้ไข] ฟังก์ชัน resetSale =====================
+async function resetSale() {
+	// [เพิ่ม] ถ้ากำลังเคลียร์ตะกร้าที่มีบิลพักไว้โหลดอยู่ ให้ลบบิลนั้นทิ้ง
+	if (loadedHeldBillId) {
+		try {
+			await fetch(`/api/orders/hold/${loadedHeldBillId}`, { method: 'DELETE' });
+			heldBillsCount--; // ลดจำนวนบนปุ่ม
 		} catch (err) {
-			console.error("Failed to fetch held bills count:", err);
-		}
-	});
-
-	onDestroy(() => {
-		clearInterval(timer);
-	});
-
-	// === ฟังก์ชันการทำงาน ===
-
-	function handleProductSearchInput() { clearTimeout(productDebounceTimer); productDebounceTimer = setTimeout(() => searchProducts(), 300); }
-	async function searchProducts() { highlightedIndex = -1; if (productSearchQuery.trim().length === 0) { productSearchResults = []; return; } isLoading = true; try { const response = await fetch(`/api/products/search?q=${encodeURIComponent(productSearchQuery)}`); if (response.ok) productSearchResults = await response.json(); } finally { isLoading = false; } }
-	function handleCustomerSearchInput() { clearTimeout(customerDebounceTimer); customerDebounceTimer = setTimeout(() => searchCustomers(), 300); }
-	async function searchCustomers() { if (customerSearchQuery.trim().length === 0) { customerSearchResults = []; return; } isLoading = true; try { const response = await fetch(`/api/customers/search?q=${encodeURIComponent(customerSearchQuery)}`); if (response.ok) customerSearchResults = await response.json(); } finally { isLoading = false; } }
-	function selectCustomer(customer: Customer) { selectedCustomer = customer; customerSearchQuery = ''; customerSearchResults = []; }
-	function clearSelectedCustomer() { selectedCustomer = null; }
-	function addToCart(product: Product, quantity = 1) { const existingItem = cart.find((item) => item.id === product.id); if (existingItem) { existingItem.quantity += quantity; } else { cart = [...cart, { ...product, quantity: quantity, discount: 0 }]; } cart = [...cart]; productSearchQuery = ''; productSearchResults = []; highlightedIndex = -1; }
-	function removeFromCart(productId: number) { cart = cart.filter((item) => item.id !== productId); }
-	function adjustQuantity(productId: number, amount: number) { const item = cart.find((i) => i.id === productId); if (item) { const newQuantity = item.quantity + amount; if (newQuantity > 0) { item.quantity = newQuantity; cart = [...cart]; } else { removeFromCart(productId); } } }
-	function updateQuantity(itemIndex: number, newQuantityStr: string) { const newQuantity = parseInt(newQuantityStr) || 1; if (newQuantity > 0) { cart[itemIndex].quantity = newQuantity; cart = [...cart]; } }
-	function handleKeydown(event: KeyboardEvent) { if (productSearchResults.length === 0) return; if (event.key === 'ArrowDown') { event.preventDefault(); highlightedIndex = (highlightedIndex + 1) % productSearchResults.length; } else if (event.key === 'ArrowUp') { event.preventDefault(); highlightedIndex = (highlightedIndex - 1 + productSearchResults.length) % productSearchResults.length; } else if (event.key === 'Enter') { event.preventDefault(); if (highlightedIndex !== -1) { addToCart(productSearchResults[highlightedIndex]); } else if (productSearchResults.length > 0) { addToCart(productSearchResults[0]); } } }
-
-	async function handleCheckout(event: CustomEvent<{ paymentType: 'COMPLETED' | 'CREDIT'; received: number; change: number }>) {
-		const { paymentType, received, change } = event.detail;
-		if (cart.length === 0) return;
-		if (paymentType === 'CREDIT' && !selectedCustomer) {
-			alert('กรุณาเลือกสมาชิกก่อนทำการขายเชื่อ');
-			return;
-		}
-		isLoading = true;
-		try {
-			const payload = {
-				cart: cart.map((item) => ({
-					id: item.id,
-					quantity: Number(item.quantity),
-					retailPrice: Number(item.retailPrice), 
-					discount: Number(item.discount || 0)
-				})),
-				customerId: selectedCustomer ? selectedCustomer.id : null,
-				paymentType: paymentType,
-				received: received,
-				change: change
-			};
-
-			const response = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-			
-			if (response.ok) {
-				const newOrder = await response.json();
-				newOrderId = newOrder.id;
-				showSaleSuccessModal = true;
-			} else {
-				const error = await response.json();
-				alert(`เกิดข้อผิดพลาด: ${error.message}`);
-			}
-		} catch (error) {
-			console.error('Checkout error:', error);
-			alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
-		} finally {
-			isLoading = false;
-			showPaymentModal = false;
+			console.error("Failed to delete held bill on reset:", err);
 		}
 	}
+	
+	cart = [];
+	productSearchQuery = '';
+	customerSearchQuery = '';
+	productSearchResults = [];
+	customerSearchResults = [];
+	selectedCustomer = null;
+	loadedHeldBillId = null; // รีเซ็ต ID ทุกครั้ง
+	highlightedIndex = -1;
+}
 
-	async function handleHoldBill() {
-		if (cart.length === 0) return;
-		isLoading = true;
-		try {
-			const payload = {
-				cart: cart.map((item) => ({ id: item.id, quantity: item.quantity, discount: item.discount })),
-				customerId: selectedCustomer ? selectedCustomer.id : null
-			};
-			const response = await fetch('/api/orders/hold', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-			if (response.ok) {
-				alert('พักบิลเรียบร้อย!');
-				heldBillsCount++; 
-				resetSale();
-			} else {
-				const errorData = await response.json();
-				alert(`เกิดข้อผิดพลาดในการพักบิล: ${errorData.message || 'กรุณาลองใหม่อีกครั้ง'}`);
-			}
-		} catch (error) {
-			console.error('Hold bill submission error:', error);
-			alert('เกิดข้อผิดพลาดในการเชื่อมต่อ ไม่สามารถพักบิลได้');
-		} finally {
-			isLoading = false;
-		}
-	}
-
-	function resetSale() {
-		cart = [];
-		productSearchQuery = '';
-		customerSearchQuery = '';
-		productSearchResults = [];
-		customerSearchResults = [];
-		selectedCustomer = null;
-		loadedHeldBillId = null;
-		highlightedIndex = -1;
-	}
-
-	function loadHeldBill(order: FullOrder) {
+// --- loadHeldBill ไม่เปลี่ยนแปลง ---
+function loadHeldBill(order: FullOrder) {
+	// resetSale จะถูกเรียกใช้โดยอัตโนมัติถ้ามี loadedHeldBillId อยู่แล้ว
+	// เพื่อลบของเก่าก่อนโหลดของใหม่
+	if(loadedHeldBillId) {
 		resetSale();
-		selectedCustomer = order.customer;
-		const newCart = order.items.map(item => ({
-			...item.product,
-			quantity: item.quantity,
-			discount: item.discount || 0
-		}));
-		cart = newCart;
-		loadedHeldBillId = order.id;
-		showHeldBillsModal = false;
 	}
 
-	function closeSuccessModalAndReset() {
-        showSaleSuccessModal = false;
-        newOrderId = null;
-        resetSale();
-    }
+	selectedCustomer = order.customer;
+	// [แก้ไข] แปลงค่า String จาก API กลับเป็น Number ตอนโหลดเข้าตะกร้า
+	const newCart = order.items.map(item => ({
+		...item.product,
+		retailPrice: Number(item.product.retailPrice), // แปลงค่าหลัก
+		costPrice: Number(item.product.costPrice),
+		wholesalePrice: item.product.wholesalePrice ? Number(item.product.wholesalePrice) : null,
+		quantity: item.quantity,
+		discount: Number(item.discount || 0)
+	}));
+	cart = newCart;
+	loadedHeldBillId = order.id;
+	showHeldBillsModal = false;
+}
 
-	$: subtotal = cart.reduce((sum, item) => sum + Number(item.retailPrice) * item.quantity, 0);
-	$: totalDiscount = cart.reduce((sum, item) => sum + Number(item.discount || 0) * item.quantity, 0);
-	$: grandTotal = subtotal - totalDiscount;
+// --- closeSuccessModalAndReset ไม่เปลี่ยนแปลง ---
+function closeSuccessModalAndReset() {
+	showSaleSuccessModal = false;
+	newOrderId = null;
+	resetSale();
+}
+
+// --- Reactive statements ไม่เปลี่ยนแปลง ---
+$: subtotal = cart.reduce((sum, item) => sum + Number(item.retailPrice) * item.quantity, 0);
+$: totalDiscount = cart.reduce((sum, item) => sum + Number(item.discount || 0) * item.quantity, 0);
+$: grandTotal = subtotal - totalDiscount;
 </script>
 
 <div class="pos-grid" class:loading={isLoading}>

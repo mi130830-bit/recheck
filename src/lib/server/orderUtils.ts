@@ -1,100 +1,123 @@
-// Path: src/lib/server/orderUtils.ts (Final Corrected Version)
+// Path: src/lib/server/orderUtils.ts (Final Refactored Version)
 
-import { PrismaClient, Prisma } from '@prisma/client';
+import { db } from '$lib/server/db';
+import type { PrismaClient } from '@prisma/client';
 
-type TxClient = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use'>;
-
-const prisma = new PrismaClient();
+// สร้าง Type สำหรับ Prisma Transaction Client เพื่อใช้ซ้ำ
+type TxClient = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
 
 /**
- * [เวอร์ชัน Transaction] สร้างเลขที่บิลที่ไม่ซ้ำกันในแต่ละวัน
- * @param tx Prisma Transaction Client
+ * [เวอร์ชันใหม่] สร้างเลขที่บิลที่ไม่ซ้ำกันในแต่ละวัน โดยทำงานภายใต้ Transaction เพื่อป้องกัน Race Condition
+ * @param prefix สามารถใส่ prefix เพิ่มเติมได้ เช่น 'HELD-' (ไม่บังคับ)
+ * @param tx Prisma Transaction Client (บังคับ)
  */
-export async function generateOrderNumberInTransaction(tx: TxClient) {
-	const today = new Date();
-	const year = today.getFullYear().toString().slice(-2);
-	const month = (today.getMonth() + 1).toString().padStart(2, '0');
-	const day = today.getDate().toString().padStart(2, '0');
-	const prefix = `${year}${month}${day}-`;
+export async function generateOrderNumber(prefix: string = '', tx: TxClient) {
+	const now = new Date();
+	// ใช้ปี พ.ศ. สองตัวท้าย
+	const datePrefix = new Intl.DateTimeFormat('th-u-ca-buddhist', {
+		year: '2-digit',
+		month: '2-digit',
+		day: '2-digit'
+	}).format(now).replace(/\//g, ''); // ผลลัพธ์ เช่น 680829
 
-	const todayOrderCount = await tx.order.count({
+	const searchPrefix = `${datePrefix}-`;
+
+	// ใช้ tx ที่รับเข้ามาในการ query
+	const lastOrder = await tx.order.findFirst({
 		where: {
-			createdAt: {
-				gte: new Date(new Date().setHours(0, 0, 0, 0)),
-				lt: new Date(new Date().setHours(23, 59, 59, 999))
+			orderNumber: {
+				startsWith: searchPrefix
 			}
+		},
+		orderBy: {
+			orderNumber: 'desc'
+		},
+		select: {
+			orderNumber: true
 		}
 	});
 
-	const nextSequence = todayOrderCount + 1;
-	return `${prefix}${nextSequence.toString().padStart(4, '0')}`;
-}
+	let nextNumber = 1;
+	if (lastOrder) {
+		const lastRunningNumber = parseInt(lastOrder.orderNumber.split('-')[1]);
+		nextNumber = lastRunningNumber + 1;
+	}
 
-/**
- * [เวอร์ชัน Standalone] สร้างเลขที่บิลที่ไม่ซ้ำกันในแต่ละวัน
- */
-export async function generateOrderNumber() {
-	const today = new Date();
-	const year = today.getFullYear().toString().slice(-2);
-	const month = (today.getMonth() + 1).toString().padStart(2, '0');
-	const day = today.getDate().toString().padStart(2, '0');
-	const prefix = `${year}${month}${day}-`;
-
-	const todayOrderCount = await prisma.order.count({
-		where: {
-			createdAt: {
-				gte: new Date(new Date().setHours(0, 0, 0, 0)),
-				lt: new Date(new Date().setHours(23, 59, 59, 999))
-			}
-		}
-	});
-
-	const nextSequence = todayOrderCount + 1;
-	return `${prefix}${nextSequence.toString().padStart(4, '0')}`;
+	const runningNumber = nextNumber.toString().padStart(4, '0');
+	
+	return `${prefix}${searchPrefix}${runningNumber}`;
 }
 
 
 /**
- * คำนวณยอดรวมและตรวจสอบข้อมูลตะกร้าสินค้าจากฐานข้อมูล
+ * ตรวจสอบราคาสินค้าจากฐานข้อมูลและคำนวณยอดรวมทั้งหมด (Grand Total)
  * @param cart ข้อมูลตะกร้าจาก client
  * @param tx Prisma Transaction Client
  */
-// [แก้ไข] ใส่ Parameter ที่ถูกต้องแทน (...)
 export async function validateAndCalculateCart(
 	cart: { id: number; quantity: number; discount: number }[],
 	tx: TxClient
 ) {
-	if (!cart || cart.length === 0) { throw new Error('Cart is empty'); }
-	const productIds = cart.map((item) => item.id);
-	const productsInDb = await tx.product.findMany({ where: { id: { in: productIds } } });
-	if (productsInDb.length !== productIds.length) { throw new Error('Some products not found in database.'); }
-	let grandTotal = 0;
-	const validatedCartItems = [];
-	for (const cartItem of cart) {
-		const product = productsInDb.find((p) => p.id === cartItem.id);
-		if (!product) { throw new Error(`Product with ID ${cartItem.id} not found.`); }
-		const itemSubtotal = product.retailPrice * cartItem.quantity;
-		const itemTotalDiscount = (cartItem.discount || 0) * cartItem.quantity;
-		grandTotal += itemSubtotal - itemTotalDiscount;
-		validatedCartItems.push({ ...cartItem, price: product.retailPrice });
+	if (!cart || cart.length === 0) {
+		throw new Error('ตะกร้าสินค้าว่างเปล่า');
 	}
-	return { grandTotal, validatedCartItems };
+
+	const productIds = cart.map((item) => item.id);
+	const productsInDb = await tx.product.findMany({
+		where: { id: { in: productIds } },
+		select: { id: true, retailPrice: true }
+	});
+
+	if (productsInDb.length !== productIds.length) {
+		throw new Error('มีสินค้าบางรายการไม่พบในฐานข้อมูล');
+	}
+
+	const productMap = new Map(productsInDb.map(p => [p.id, p]));
+
+	let grandTotal = 0;
+	for (const cartItem of cart) {
+		const product = productMap.get(cartItem.id);
+		if (!product) {
+			// This case should theoretically not happen due to the check above
+			throw new Error(`ไม่พบสินค้า ID: ${cartItem.id}`);
+		}
+		// ใช้ retailPrice จากฐานข้อมูลเพื่อความปลอดภัย
+		const price = product.retailPrice; 
+		const discount = cartItem.discount || 0;
+		const quantity = cartItem.quantity;
+
+		const itemTotal = price.toNumber() * quantity;
+		const itemDiscount = discount * quantity;
+		grandTotal += itemTotal - itemDiscount;
+	}
+
+	return { grandTotal };
 }
+
 
 /**
  * ตรวจสอบสต็อกสินค้าคงเหลือก่อนเริ่มทำรายการ
  * @param cart ข้อมูลตะกร้าจาก client
  * @param tx Prisma Transaction Client
  */
-// [แก้ไข] ใส่ Parameter ที่ถูกต้องแทน (...)
 export async function checkStockAvailability(
 	cart: { id: number; quantity: number }[],
 	tx: TxClient
 ) {
 	const productIds = cart.map((item) => item.id);
-	const productsInDb = await tx.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true, stockQuantity: true } });
+	const productsInDb = await tx.product.findMany({
+		where: { id: { in: productIds } },
+		select: { id: true, name: true, stockQuantity: true, trackStock: true }
+	});
+
 	for (const cartItem of cart) {
 		const product = productsInDb.find((p) => p.id === cartItem.id);
-		if (!product || product.stockQuantity < cartItem.quantity) { throw new Error(`สินค้าไม่เพียงพอ: ${product?.name || 'Unknown'} (คงเหลือ: ${product?.stockQuantity || 0}, ต้องการ: ${cartItem.quantity})`); }
+		if (!product) {
+			throw new Error(`ไม่พบสินค้า ID: ${cartItem.id} ในระบบ`);
+		}
+		// เช็คสต็อกเฉพาะสินค้าที่เปิดใช้งาน trackStock
+		if (product.trackStock && product.stockQuantity < cartItem.quantity) {
+			throw new Error(`สินค้าไม่เพียงพอ: ${product.name} (คงเหลือ: ${product.stockQuantity}, ต้องการ: ${cartItem.quantity})`);
+		}
 	}
 }

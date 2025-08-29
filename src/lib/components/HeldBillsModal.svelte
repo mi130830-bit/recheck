@@ -1,4 +1,4 @@
-<!-- Path: src/lib/components/HeldBillsModal.svelte (ฉบับเต็มสมบูรณ์) -->
+<!-- Path: src/lib/components/HeldBillsModal.svelte (Final Corrected Version based on your code) -->
 
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
@@ -10,22 +10,26 @@
 
 	let heldOrders: FullOrder[] = [];
 	let isLoading = true;
+	let errorMessage = ''; // [เพิ่ม] เพิ่มตัวแปรสำหรับเก็บข้อความ Error
 
 	const dispatch = createEventDispatcher();
 
 	async function fetchHeldOrders() {
 		if (!showModal) return;
 		isLoading = true;
+		errorMessage = ''; // [เพิ่ม] รีเซ็ต Error ทุกครั้งที่โหลดใหม่
 		try {
-			// ยิง fetch ไปที่ Path ที่ถูกต้อง
 			const response = await fetch('/api/orders/hold'); 
 			if (response.ok) {
 				heldOrders = await response.json();
 			} else {
-				console.error('Failed to fetch held orders');
+				const errorData = await response.json();
+				errorMessage = errorData.message || 'Failed to fetch held orders';
+				console.error('Failed to fetch held orders:', errorData);
 				heldOrders = [];
 			}
 		} catch (error) {
+			errorMessage = 'เกิดข้อผิดพลาดในการเชื่อมต่อ';
 			console.error('Error fetching held orders:', error);
 			heldOrders = [];
 		} finally {
@@ -41,7 +45,6 @@
 		dispatch('close');
 	}
 
-	// เมื่อ showModal เปลี่ยนเป็น true ให้ fetch ข้อมูล
 	$: if (showModal) {
 		fetchHeldOrders();
 	}
@@ -66,6 +69,9 @@
 			<div class="modal-body">
 				{#if isLoading}
 					<p aria-busy="true">กำลังโหลดข้อมูล...</p>
+				<!-- [เพิ่ม] แสดงข้อความ Error ถ้ามี -->
+				{:else if errorMessage}
+					<p style="color: var(--pico-color-red-500);">{errorMessage}</p>
 				{:else if heldOrders.length === 0}
 					<p>ไม่มีบิลที่พักไว้ในขณะนี้</p>
 				{:else}
@@ -86,7 +92,8 @@
 										<small>{new Date(order.createdAt).toLocaleTimeString('th-TH')}</small>
 									</td>
 									<td>{order.customer?.firstName || 'ลูกค้าทั่วไป'}</td>
-									<td style="text-align: right;">{order.total.toFixed(2)}</td>
+									<!-- [จุดแก้ไขสำคัญ] แปลง String เป็น Number ก่อนใช้ toFixed -->
+									<td style="text-align: right;">{Number(order.total).toFixed(2)}</td>
 									<td><button on:click={() => selectBill(order)} class="outline">เลือก</button></td>
 								</tr>
 							{/each}

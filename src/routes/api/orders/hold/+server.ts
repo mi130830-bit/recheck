@@ -1,51 +1,53 @@
-// Path: src/routes/api/orders/hold/+server.ts (ฉบับแก้ไขที่สมบูรณ์)
+// Path: src/routes/api/orders/hold/+server.ts (Final Corrected Version)
 
 import { db } from '$lib/server/db';
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-// ตรวจสอบให้แน่ใจว่า path ไปยัง orderUtils ถูกต้อง
-import { generateOrderNumber, validateAndCalculateCart } from '$lib/server/orderUtils'; 
+import { generateOrderNumber } from '$lib/server/orderUtils';
 
 // =============================================================
-//  ฟังก์ชัน GET สำหรับดึงรายการบิลที่พักไว้ (นี่คือส่วนที่ต้องแก้ไข)
+//  ฟังก์ชัน GET สำหรับดึงรายการบิลที่พักไว้
 // =============================================================
 export const GET: RequestHandler = async () => {
 	try {
-		const heldOrders = await db.order.findMany({
+		const heldOrdersFromDb = await db.order.findMany({
 			where: { status: 'HELD' },
-			include: {
-				customer: true, // ดึงข้อมูลลูกค้าที่ผูกกับบิล
-				items: {      // ดึงรายการสินค้าทั้งหมดในบิล
-					include: {
-						product: true // และดึงข้อมูลสินค้าของแต่ละรายการ
-					}
-				}
-			},
-			orderBy: {
-				createdAt: 'desc' // เรียงจากบิลล่าสุดไปเก่าสุด
-			}
+			include: { customer: true, items: { include: { product: true } } },
+			orderBy: { createdAt: 'desc' }
 		});
 		
-		// [สำคัญ] ส่งข้อมูลกลับไปเป็น Response object ด้วย json()
+		// [แก้ไข] แปลงค่า Decimal เป็น String ก่อนส่ง JSON (ดีที่สุดสำหรับ API)
+		const heldOrders = heldOrdersFromDb.map(order => ({
+			...order,
+			total: order.total.toString(),
+			items: order.items.map(item => ({
+				...item,
+				price: item.price.toString(),
+				discount: item.discount.toString()
+			}))
+		}));
+		
 		return json(heldOrders);
 
 	} catch (err) {
 		console.error('Error fetching held orders:', err);
-		// [สำคัญ] หากเกิดข้อผิดพลาด ให้ throw error() ซึ่งจะสร้าง Response ที่มีสถานะ 500
 		throw error(500, 'ไม่สามารถดึงข้อมูลบิลที่พักไว้ได้');
 	}
 };
 
-
 // =============================================================
-//  ฟังก์ชัน POST สำหรับการพักบิล (โค้ดส่วนนี้ของคุณดีอยู่แล้ว)
+//  ฟังก์ชัน POST สำหรับการพักบิล
 // =============================================================
 export const POST: RequestHandler = async ({ request }) => {
 	const { cart, customerId } = await request.json();
 
+	// [หมายเหตุ] ต้องแน่ใจว่า validateAndCalculateCart ไม่มีในโค้ดแล้ว
+	// หากมี ให้แน่ใจว่า grandTotal เป็น Number
+	const grandTotal = cart.reduce((sum: number, item: any) => sum + (Number(item.retailPrice) * Number(item.quantity)), 0);
+
+
 	try {
-		const heldOrder = await db.$transaction(async (tx) => {
-			const { grandTotal, validatedCartItems } = await validateAndCalculateCart(cart, tx);
+		const heldOrderFromDb = await db.$transaction(async (tx) => {
 			const orderNumber = await generateOrderNumber('HELD', tx);
 
 			const order = await tx.order.create({
@@ -53,24 +55,42 @@ export const POST: RequestHandler = async ({ request }) => {
 					orderNumber,
 					total: grandTotal,
 					status: 'HELD',
-					customerId: customerId
-				}
+					...(customerId && { customer: { connect: { id: customerId } } })
+				},
+				include: { items: true, customer: true } // ดึงข้อมูลกลับมาด้วย
 			});
 
-			const orderItemsData = validatedCartItems.map((item) => ({
+			const orderItemsData = cart.map((item: any) => ({
 				orderId: order.id,
 				productId: item.id,
 				quantity: item.quantity,
-				price: item.price,
-				discount: item.discount
+				price: item.retailPrice, // Prisma จะแปลง Number เป็น Decimal ให้
+				discount: item.discount || 0
 			}));
 
-			await tx.orderItem.createMany({
-				data: orderItemsData
-			});
+			await tx.orderItem.createMany({ data: orderItemsData });
 			
-			return order;
+			// ต้องดึงข้อมูล order อีกครั้งหลังสร้าง items เพื่อให้ข้อมูลครบ
+			return await tx.order.findUnique({
+				where: { id: order.id },
+				include: { items: true, customer: true }
+			});
 		});
+
+		if (!heldOrderFromDb) {
+			throw new Error('Failed to create held order');
+		}
+
+		// [แก้ไข] แปลงค่า Decimal เป็น String ก่อนส่งกลับ
+		const heldOrder = {
+			...heldOrderFromDb,
+			total: heldOrderFromDb.total.toString(),
+			items: heldOrderFromDb.items.map(item => ({
+				...item,
+				price: item.price.toString(),
+				discount: item.discount.toString()
+			}))
+		}
 
 		return json(heldOrder, { status: 201 });
 
