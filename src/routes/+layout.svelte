@@ -21,6 +21,7 @@
 					<ul class="dropdown-menu">
 						<li><a href="/products">รายการสินค้าทั้งหมด</a></li>
 						<li><a href="/stock-in">รับของเข้าคลัง</a></li>
+						<li><a href="/returns">รับคืนสินค้า</a></li>
 					</ul>
 				</li>
 				<li class="dropdown">

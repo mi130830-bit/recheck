@@ -137,6 +137,7 @@ model Product {
   supplierId         Int
   OrderItems         OrderItem[]
   purchaseOrderItems PurchaseOrderItem[] // ความสัมพันธ์กับ PurchaseOrderItem
+  returns            ReturnItem[]
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
   @@fulltext([name, alias, barcode])
@@ -146,29 +147,62 @@ model Product {
 //  Model: Order (ข้อมูลบิลการขาย)
 // ===============================================
 model Order {
-  id          Int         @id @default(autoincrement())
-  orderNumber String      @unique
-  total       Float
-  status      OrderStatus @default(COMPLETED)
-  createdAt   DateTime    @default(now())
-  customer    Customer?   @relation(fields: [customerId], references: [id])
-  customerId  Int?
-  items       OrderItem[]
+  id              Int               @id @default(autoincrement())
+  orderNumber     String            @unique
+  total           Float
+  status          OrderStatus       @default(COMPLETED)
+  createdAt       DateTime          @default(now())
+  customer        Customer?         @relation(fields: [customerId], references: [id])
+  customerId      Int?
+  items           OrderItem[]
   billingNoteItem BillingNoteItem?
+  returns         ProductReturn[] // <--- [เพิ่มบรรทัดนี้]
 }
 
 // ===============================================
 //  Model: OrderItem (รายการสินค้าในบิล)
 // ===============================================
 model OrderItem {
-  id        Int     @id @default(autoincrement())
-  quantity  Int
-  price     Float
-  discount  Float   @default(0)
-  order     Order   @relation(fields: [orderId], references: [id])
-  orderId   Int
-  product   Product @relation(fields: [productId], references: [id])
-  productId Int
+  id               Int     @id @default(autoincrement())
+  quantity         Int
+  price            Float
+  discount         Float   @default(0)
+  order            Order   @relation(fields: [orderId], references: [id])
+  orderId          Int
+  product          Product @relation(fields: [productId], references: [id])
+  productId        Int
+  returnedQuantity Int     @default(0) // <--- [เพิ่มบรรทัดนี้]
+}
+// ===============================================
+// [เพิ่มใหม่] ตารางสำหรับเก็บข้อมูล "หัวบิล" การรับคืน
+// ===============================================
+model ProductReturn {
+  id                Int      @id @default(autoincrement())
+  originalOrderId   Int      // ID ของบิลขายต้นฉบับ
+  totalRefundAmount Decimal  // ยอดเงินที่คืนทั้งหมดในครั้งนี้
+  reason            String?  // เหตุผลการคืน (ถ้ามี)
+  createdAt         DateTime @default(now())
+
+  originalOrder Order        @relation(fields: [originalOrderId], references: [id], onDelete: Cascade)
+  items         ReturnItem[]
+
+  @@map("product_returns")
+}
+
+// ===============================================
+// [เพิ่มใหม่] ตารางสำหรับเก็บ "รายการสินค้า" ที่รับคืน
+// ===============================================
+model ReturnItem {
+  id              Int     @id @default(autoincrement())
+  productReturnId Int     // ID ของหัวบิลการคืน
+  productId       Int     // ID ของสินค้า
+  quantity        Int     // จำนวนที่คืน
+  priceAtReturn   Decimal // ราคาต่อหน่วย ณ ตอนที่คืน (ดึงจากบิลเก่า)
+
+  productReturn ProductReturn @relation(fields: [productReturnId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
+
+  @@map("return_items")
 }
 
 // ===============================================
