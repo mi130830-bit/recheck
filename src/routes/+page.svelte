@@ -1,11 +1,11 @@
-<!-- Path: src/routes/+page.svelte (ฉบับแก้ไข ReferenceError) -->
-
+<!-- Path: src/routes/+page.svelte (ฉบับแก้ไขสมบูรณ์) -->
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { Product, Customer } from '@prisma/client';
 	import PaymentModal from '$lib/components/PaymentModal.svelte';
 	import HeldBillsModal from '$lib/components/HeldBillsModal.svelte';
-
+	
+type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { product: Product })[] };
 	// State สำหรับการค้นหา
 	let productSearchQuery = '';
 	let customerSearchQuery = '';
@@ -25,6 +25,7 @@
 
 	// State สำหรับบิลที่พักไว้
 	let loadedHeldBillId: number | null = null;
+	let heldBillsCount = 0;
 
 	// State สำหรับการเลือกด้วยคีย์บอร์ด
 	let highlightedIndex = -1;
@@ -34,18 +35,28 @@
 	let currentTime = '';
 	let timer: NodeJS.Timeout;
 
-	// State สำหรับนับจำนวนบิลที่พัก (ตัวอย่าง)
-	let heldBillsCount = 0;
-
-	onMount(() => {
+	onMount(async () => {
+		// --- โค้ดนาฬิกา ---
 		timer = setInterval(() => {
 			const now = new Date();
 			currentDate = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', calendar: 'buddhist' });
 			currentTime = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 		}, 1000);
+		// เรียกครั้งแรกทันที
 		const now = new Date();
 		currentDate = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', calendar: 'buddhist' });
 		currentTime = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+		// --- [แก้ไข] ดึงจำนวนบิลที่พักไว้ตอนเริ่ม ---
+		try {
+			const response = await fetch('/api/orders/hold');
+			if (response.ok) {
+				const heldBills = await response.json();
+				heldBillsCount = heldBills.length;
+			}
+		} catch (err) {
+			console.error("Failed to fetch held bills count:", err);
+		}
 	});
 
 	onDestroy(() => {
@@ -133,8 +144,10 @@
 	
 	function updateQuantity(itemIndex: number, newQuantityStr: string) {
 		const newQuantity = parseInt(newQuantityStr) || 1;
-		cart[itemIndex].quantity = Math.max(1, newQuantity);
-		cart = cart;
+		if (newQuantity > 0) {
+			cart[itemIndex].quantity = newQuantity;
+			cart = [...cart];
+		}
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
@@ -149,9 +162,9 @@
 			event.preventDefault();
 			if (highlightedIndex !== -1) {
 				addToCart(productSearchResults[highlightedIndex]);
-			} else {
-				addToCart(productSearchResults[0]);
-			}
+			} else if (productSearchResults.length > 0) {
+                addToCart(productSearchResults[0]);
+            }
 		}
 	}
 
@@ -165,14 +178,13 @@
 		isLoading = true;
 		try {
 			const payload = {
-				cart: cart.map((item) => ({ id: item.id, quantity: item.quantity, retailPrice: item.retailPrice, discount: item.discount })),
-				total: grandTotal,
+				cart: cart.map((item) => ({ id: item.id, quantity: item.quantity, discount: item.discount })),
 				customerId: selectedCustomer ? selectedCustomer.id : null,
 				paymentType: paymentType,
 				received: received,
 				change: change
 			};
-			const response = await fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+			const response = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
 			if (response.ok) {
 				const newOrder = await response.json();
 				alert(`บันทึกการขายสำเร็จ! (เลขที่บิล: ${newOrder.orderNumber})`);
@@ -190,10 +202,45 @@
 		}
 	}
 
+	// =============================================================
+	// [แก้ไขใหม่ทั้งหมด] ฟังก์ชันพักบิลที่ถูกต้อง
+	// =============================================================
 	async function handleHoldBill() {
-		alert('พักบิลเรียบร้อย!');
-		resetSale();
+		if (cart.length === 0) return;
+		
+		isLoading = true;
+		try {
+			const payload = {
+				cart: cart.map((item) => ({ 
+					id: item.id, 
+					quantity: item.quantity, 
+					discount: item.discount 
+				})),
+				customerId: selectedCustomer ? selectedCustomer.id : null
+			};
+
+			const response = await fetch('/api/orders/hold', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(payload)
+			});
+
+			if (response.ok) {
+				alert('พักบิลเรียบร้อย!');
+				heldBillsCount++; 
+				resetSale();
+			} else {
+				const errorData = await response.json();
+				alert(`เกิดข้อผิดพลาดในการพักบิล: ${errorData.message || 'กรุณาลองใหม่อีกครั้ง'}`);
+			}
+		} catch (error) {
+			console.error('Hold bill submission error:', error);
+			alert('เกิดข้อผิดพลาดในการเชื่อมต่อ ไม่สามารถพักบิลได้');
+		} finally {
+			isLoading = false;
+		}
 	}
+
 	function resetSale() {
 		cart = [];
 		productSearchQuery = '';
@@ -204,9 +251,28 @@
 		loadedHeldBillId = null;
 		highlightedIndex = -1;
 	}
+	function loadHeldBill(order: FullOrder) {
+		// 1. เคลียร์ตะกร้าเก่าก่อนเริ่ม (ใช้ resetSale แต่เก็บค่า modal ไว้)
+		resetSale();
+
+		// 2. นำข้อมูลลูกค้าจากบิลที่พักไว้มาใส่
+		selectedCustomer = order.customer;
+
+		// 3. แปลงรายการสินค้าในบิล (order.items) ให้เป็นรูปแบบของตะกร้า (cart)
+		const newCart = order.items.map(item => ({
+			...item.product, // เอาข้อมูลสินค้าทั้งหมดมา (name, price, barcode, etc.)
+			quantity: item.quantity,
+			discount: item.discount || 0 // ใช้ส่วนลดจากบิล ถ้าไม่มีให้เป็น 0
+		}));
+		cart = newCart;
+		// 4. เก็บ ID ของบิลที่โหลดมาไว้ (สำคัญมากสำหรับขั้นตอนต่อไป เช่น การลบ/อัปเดต)
+		loadedHeldBillId = order.id;
+		// 5. ปิดหน้าต่าง Modal
+		showHeldBillsModal = false;
+	}
 
 	$: subtotal = cart.reduce((sum, item) => sum + item.retailPrice * item.quantity, 0);
-	$: totalDiscount = cart.reduce((sum, item) => sum + Number(item.discount) * item.quantity, 0);
+	$: totalDiscount = cart.reduce((sum, item) => sum + Number(item.discount || 0) * item.quantity, 0);
 	$: grandTotal = subtotal - totalDiscount;
 </script>
 
@@ -348,7 +414,7 @@
 
 <!-- [แก้ไข] Modals - ใช้ bind:showModal และชื่อตัวแปรที่ถูกต้อง -->
 <PaymentModal bind:showModal={showPaymentModal} totalAmount={grandTotal} on:confirm={handleCheckout} on:close={() => (showPaymentModal = false)} />
-<HeldBillsModal bind:showModal={showHeldBillsModal} on:select={(e) => alert('Load bill: ' + e.detail.id)} on:close={() => (showHeldBillsModal = false)} />
+<HeldBillsModal bind:showModal={showHeldBillsModal} on:select={(event) => loadHeldBill(event.detail)} on:close={() => (showHeldBillsModal = false)} />
 
 <!-- ========================= ส่วน Style ========================= -->
 <style>
