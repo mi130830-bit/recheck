@@ -1,48 +1,58 @@
-<!-- File: src/routes/reports/low-stock/+page.svelte -->
+<!-- Path: src/routes/reports/low-stock/+page.svelte (Final Corrected Version) -->
 
 <script lang="ts">
-  export let data;
+	import type { PageData } from './$types';
+
+	export let data: PageData;
+	$: lowStockProducts = data.lowStockProducts;
 </script>
 
+<svelte:head>
+	<title>รายงานสินค้าใกล้หมด</title>
+</svelte:head>
+
 <main class="container">
-  <header>
-    <h1>รายงานสินค้าที่ต้องสั่งซื้อ (สต็อกใกล้หมด)</h1>
-    <p>แสดงรายการสินค้าที่มีจำนวนคงคลังน้อยกว่าหรือเท่ากับจุดสั่งซื้อ</p>
-  </header>
-  
-  {#if data.lowStockProducts.length === 0}
-    <article>
-      <p>เยี่ยมมาก! ไม่มีสินค้าที่สต็อกใกล้หมดในขณะนี้</p>
-    </article>
-  {:else}
-    <table>
-      <thead>
-        <tr>
-          <th>บาร์โค้ด</th>
-          <th>ชื่อสินค้า</th>
-          <th style="text-align: right;">คงคลัง</th>
-          <th style="text-align: right;">จุดสั่งซื้อ</th>
-          <th>ผู้ขาย</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each data.lowStockProducts as item (item.id)}
-          <tr class="warning">
-            <td>{item.barcode || '-'}</td>
-            <td>{item.name}</td>
-            <td style="text-align: right;"><strong>{item.stockQuantity}</strong></td>
-            <td style="text-align: right;">{item.reorderPoint}</td>
-            <td>{item.supplier.name}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  {/if}
+	<h1>รายงานสินค้าใกล้หมด</h1>
+
+	{#if lowStockProducts.length === 0}
+		<article>
+			<p>✅ ยอดเยี่ยม! ไม่มีสินค้าที่ใกล้หมดสต็อกในขณะนี้</p>
+		</article>
+	{:else}
+		<div style="overflow-x: auto;">
+			<table>
+				<thead>
+					<tr>
+						<th>ชื่อสินค้า</th>
+						<th>บาร์โค้ด</th>
+						<th style="text-align: center;">คงเหลือ</th>
+						<th style="text-align: center;">จุดสั่งซื้อ</th>
+						<th>ผู้ขาย</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each lowStockProducts as product (product.id)}
+						<tr>
+							<td>{product.name}</td>
+							<td>{product.barcode || '-'}</td>
+							<td style="text-align: center; color: var(--pico-color-red-500);">
+								<strong>{product.stockQuantity}</strong>
+							</td>
+							<td style="text-align: center;">{product.reorderPoint}</td>
+							<!-- [จุดแก้ไขสำคัญ] ใช้ Optional Chaining (?.) เพื่อป้องกัน Error -->
+							<!-- บรรทัดนี้คือบรรทัดที่ 35 ของคุณ -->
+							<td>{product.supplier?.name || 'ไม่มีข้อมูล'}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
 </main>
+
 <style>
-    .container { max-width: 960px; margin: 0 auto; }
-    .warning {
-        /* สีพื้นหลังโทนเหลืองอ่อนๆ เพื่อเตือน */
-        --pico-table-row-stripped-background-color: #fff3cd;
-    }
+	.container {
+		max-width: 960px;
+		margin: 2rem auto;
+	}
 </style>

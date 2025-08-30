@@ -1,21 +1,20 @@
-// File: src/routes/suppliers/+page.server.ts (ฉบับแก้ไขสมบูรณ์)
+// File: src/routes/suppliers/+page.server.ts (Final Refactored Version)
 
-import { PrismaClient } from '@prisma/client';
+import { db } from '$lib/server/db'; // [ปรับปรุง] ใช้ db instance กลาง ไม่สร้าง PrismaClient ใหม่
 import { fail } from '@sveltejs/kit';
-
-const prisma = new PrismaClient();
+import type { PageServerLoad, Actions } from './$types'; // [ปรับปรุง] Import Type ที่ถูกต้อง
 
 // --- ดึงข้อมูลทั้งหมดมาแสดง ---
-export async function load() {
-  const suppliers = await prisma.supplier.findMany({
+export const load: PageServerLoad = async () => {
+  const suppliers = await db.supplier.findMany({
     orderBy: { createdAt: 'desc' },
   });
   return { suppliers };
-}
+};
 
 
-// --- จัดการ Form Actions (ตอนนี้มีแค่ 'delete') ---
-export const actions = {
+// --- จัดการ Form Actions ---
+export const actions: Actions = {
   delete: async ({ request }) => {
     const data = await request.formData();
     const id = data.get('id');
@@ -24,10 +23,12 @@ export const actions = {
       return fail(400, { message: 'Invalid request' });
     }
 
+    const supplierId = Number(id);
+
     try {
-      // 1. ก่อนลบ Supplier, เช็คว่ามี Product ผูกอยู่หรือไม่
-      const productCount = await prisma.product.count({
-        where: { supplierId: Number(id) },
+      // 1. ตรวจสอบความสัมพันธ์กับ Product
+      const productCount = await db.product.count({
+        where: { supplierId: supplierId },
       });
 
       if (productCount > 0) {
@@ -36,9 +37,9 @@ export const actions = {
         });
       }
       
-      // 2. ก่อนลบ Supplier, เช็คว่ามี PurchaseOrder (ใบรับของ) ผูกอยู่หรือไม่
-      const poCount = await prisma.purchaseOrder.count({
-          where: { supplierId: Number(id) }
+      // 2. ตรวจสอบความสัมพันธ์กับ PurchaseOrder (ใบรับของ)
+      const poCount = await db.purchaseOrder.count({
+          where: { supplierId: supplierId }
       });
       
       if (poCount > 0) {
@@ -46,8 +47,8 @@ export const actions = {
       }
 
       // ถ้าไม่มีอะไรผูกอยู่ ก็สามารถลบได้
-      await prisma.supplier.delete({
-        where: { id: Number(id) },
+      await db.supplier.delete({
+        where: { id: supplierId },
       });
 
     } catch (err) {
@@ -55,7 +56,6 @@ export const actions = {
       return fail(500, { message: 'เกิดข้อผิดพลาดในการลบข้อมูล' });
     }
 
-    // ไม่ต้อง return อะไรเป็นพิเศษ เพราะหน้าเว็บจะโหลดข้อมูลใหม่เอง
     return { success: true };
   },
 };

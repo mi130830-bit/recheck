@@ -1,86 +1,141 @@
-<!-- File: src/routes/products/+page.svelte (Final Corrected Version) -->
+<!-- Path: src/routes/products/+page.svelte (Final Corrected Version) -->
 
 <script lang="ts">
   import { enhance } from '$app/forms';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import type { PageData } from './$types';
   
   export let data: PageData;
-  // ใช้ form จาก data โดยตรง เพื่อรับ message จาก action
-  $: form = data.form; 
+  
+  // ดึงค่าต่างๆ ที่ server ส่งมาให้
+  $: ({ products, totalItems, currentPage, totalPages, limit } = data);
+  // [แก้ไข] เพิ่มบรรทัดนี้ที่ขาดหายไป เพื่อดึงข้อมูลจาก form actions
+  $: form = data.form;
+
+  // State สำหรับการค้นหาแบบ Live
+  let searchQuery = data.query ?? '';
+  let debounceTimer: NodeJS.Timeout;
+
+  // ฟังก์ชันสำหรับจัดการ Live Search
+  function handleSearchInput() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      const params = new URLSearchParams($page.url.searchParams.toString());
+      params.set('query', searchQuery);
+      params.set('page', '1');
+      goto(`?${params.toString()}`, { 
+        keepFocus: true,
+        noScroll: true,
+        replaceState: true
+      });
+    }, 300);
+  }
 </script>
 
 <main class="container">
   <header class="header-container">
-    <h1>จัดการข้อมูลสินค้า</h1>
-    <a href="/products/new" role="button">+ เพิ่มสินค้าใหม่</a>
+    <h1>จัดการข้อมูลสินค้า ({totalItems} รายการ)</h1>
+    <div class="button-group">
+      <a href="/products/import" role="button" class="secondary outline">นำเข้าจาก Excel</a>
+      <a href="/products/new" role="button">+ เพิ่มสินค้าใหม่</a>
+    </div>
   </header>
   
+  <div class="search-form">
+    <input 
+      type="search" 
+      name="query" 
+      placeholder="พิมพ์เพื่อค้นหาจากชื่อ, บาร์โค้ด, ชื่อย่อ..." 
+      bind:value={searchQuery}
+      on:input={handleSearchInput}
+    />
+  </div>
+
+  <!-- โค้ดส่วนนี้จะทำงานได้แล้ว เพราะตัวแปร form ถูกประกาศแล้ว -->
   {#if form?.message}
-    <aside class="error-message"><p>{form.message}</p></aside>
+    <aside class="error-message">
+        <p>{form.message}</p>
+    </aside>
   {/if}
 
-  {#if data.products.length === 0}
-    <article><p>ยังไม่มีข้อมูลสินค้าในระบบ</p></article>
+  {#if products.length === 0}
+    <article><p>ไม่พบข้อมูลสินค้าที่ตรงกับเงื่อนไขการค้นหา</p></article>
   {:else}
-    <table>
-      <thead>
-        <tr>
-          <th>ชื่อสินค้า</th>
-          <th>บาร์โค้ด</th>
-          <th style="text-align: right;">ราคาปลีก</th>
-          <th style="text-align: right;">คงคลัง</th>
-          <th>ผู้ขาย</th>
-          <th style="width: 200px;">การกระทำ</th>
-        </tr>
-      </thead>
-      <tbody>
-        <!-- โค้ดส่วนนี้ของคุณถูกต้องแล้ว -->
-        {#each data.products as product (product.id)}
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
           <tr>
-            <td><strong>{product.name}</strong></td>
-            <td>{product.barcode || '-'}</td>
-            <!-- ข้อมูลที่มาจาก load เป็น Number อยู่แล้ว สามารถใช้ toFixed ได้เลย -->
-            <td style="text-align: right;">{product.retailPrice.toFixed(2)}</td>
-            <td style="text-align: right;">{product.stockQuantity} {product.unit || ''}</td>
-            <!-- [แก้ไข] เพิ่ม '?.' (Optional Chaining) เพื่อความปลอดภัย -->
-            <td>{product.supplier?.name || 'ไม่มีข้อมูล'}</td>
-            <td>
-              <div class="action-buttons">
-                <a href="/products/{product.id}/edit" role="button" class="outline">แก้ไข</a>
-                <form 
-                  method="POST" 
-                  action="?/delete" 
-                  use:enhance
-                >
-                  <input type="hidden" name="id" value={product.id} />
-                  <button 
-                    type="submit" 
-                    class="contrast outline"
-                    on:click={(event) => {
+            <th>ชื่อสินค้า</th>
+            <th>บาร์โค้ด</th>
+            <th style="text-align: right;">ราคาปลีก</th>
+            <th style="text-align: center;">คงคลัง</th>
+            <th>ผู้ขาย</th>
+            <th style="width: 200px;">การกระทำ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each products as product (product.id)}
+            <tr>
+              <td>{product.name}</td>
+              <td>{product.barcode || '-'}</td>
+              <td style="text-align: right;">{product.retailPrice.toFixed(2)}</td>
+              <td style="text-align: center;">{product.stockQuantity} {product.unit || ''}</td>
+              <td>{product.supplier?.name || '-'}</td>
+              <td>
+                <div class="action-buttons">
+                  <a href="/products/{product.id}/edit" role="button" class="outline">แก้ไข</a>
+                  <form method="POST" action="?/delete" use:enhance>
+                    <input type="hidden" name="id" value={product.id} />
+                    <button type="submit" class="contrast outline" on:click={(event) => {
                       if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบ "${product.name}"?`)) {
                         event.preventDefault();
                       }
-                    }}
-                  >ลบ</button>
-                </form>
-              </div>
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+                    }}>ลบ</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+
+    {#if totalPages > 1}
+      <nav class="pagination">
+        <ul>
+          <li>
+            <a href="?query={searchQuery}&page={currentPage - 1}" aria-label="Previous" class:disabled={currentPage <= 1}>
+              &laquo; ก่อนหน้า
+            </a>
+          </li>
+          <li>
+            <span>หน้า {currentPage} / {totalPages}</span>
+          </li>
+          <li>
+            <a href="?query={searchQuery}&page={currentPage + 1}" aria-label="Next" class:disabled={currentPage >= totalPages}>
+              ถัดไป &raquo;
+            </a>
+          </li>
+        </ul>
+      </nav>
+    {/if}
   {/if}
 </main>
 
 <style>
-  .container { max-width: 960px; margin: 0 auto; padding: 1rem; }
+  .container { max-width: 1024px; margin: 2rem auto; }
   .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-  .action-buttons {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.5rem;
-  }
+  .button-group { display: flex; gap: 0.5rem; }
+  .search-form { margin-bottom: 2rem; }
+  .action-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
   .action-buttons form { margin: 0; }
   .action-buttons a, .action-buttons button { width: 100%; padding: 0.25rem 0.5rem; font-size: 0.9em; margin: 0; }
   .error-message { background-color: var(--pico-form-element-invalid-background-color); color: var(--pico-form-element-invalid-color); border-color: var(--pico-form-element-invalid-border-color); padding: 0.5rem 1rem; margin-bottom: 1rem; border-radius: var(--pico-border-radius); }
+  
+  .pagination { margin-top: 2rem; display: flex; justify-content: center; }
+  .pagination ul { display: flex; list-style: none; padding: 0; margin: 0; align-items: center; gap: 1rem; }
+  .pagination a { display: block; padding: 0.5rem 1rem; text-decoration: none; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); }
+  .pagination a.disabled { pointer-events: none; opacity: 0.5; color: var(--pico-muted-color); }
+  .pagination a:not(.disabled):hover { background-color: var(--pico-muted-background-color); }
 </style>

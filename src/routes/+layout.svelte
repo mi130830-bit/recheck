@@ -28,14 +28,12 @@
 					<a href="/customers">จัดการสมาชิก &#9662;</a>
 					<ul class="dropdown-menu">
 						<li><a href="/customers">รายการสมาชิก</a></li>
-						<li><a href="/customers/new">เพิ่มสมาชิกใหม่</a></li>
 					</ul>
 				</li>
 				<li class="dropdown">
 					<a href="/suppliers">จัดการผู้ขาย &#9662;</a>
 					<ul class="dropdown-menu">
 						<li><a href="/suppliers">รายการผู้ขาย</a></li>
-						<li><a href="/suppliers/new">เพิ่มผู้ขายใหม่</a></li>
 					</ul>
 				</li>
 				<li class="dropdown">
@@ -43,6 +41,7 @@
 					<ul class="dropdown-menu">
 						<li><a href="/orders">ประวัติการขายทั้งหมด</a></li>
 						<li><a href="/reports/debtors">รายงานลูกหนี้</a></li>
+						<li><a href="/billing">รายการใบวางบิล</a></li> 
 						<li><a href="/reports">Dashboard</a></li>
 						<li><a href="/reports/top-selling">รายงานสินค้าขายดี</a></li>
 						<li><a href="/reports/low-stock">รายงานสต็อกใกล้หมด</a></li>

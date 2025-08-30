@@ -1,4 +1,4 @@
-// Path: src/routes/+page.svelte (SCRIPT SECTION - FINAL CORRECTED VERSION)
+
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { Product, Customer, Order, OrderItem } from '@prisma/client';

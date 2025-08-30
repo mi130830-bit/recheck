@@ -1,44 +1,35 @@
-// File: src/routes/reports/low-stock/+page.server.ts (ฉบับแก้ไข)
+// Path: src/routes/reports/low-stock/+page.server.ts (Final Corrected Version)
 
-import { PrismaClient } from '@prisma/client';
-import { Prisma } from '@prisma/client';
+import { db } from '$lib/server/db';
+import type { PageServerLoad } from './$types';
 
-const prisma = new PrismaClient();
+export const load: PageServerLoad = async () => {
+	// 1. ดึงข้อมูลสินค้าทั้งหมดที่เปิดใช้งานการเช็คสต็อกและมีจุดสั่งซื้อกำหนดไว้
+	const candidateProducts = await db.product.findMany({
+		where: {
+			trackStock: true,
+			reorderPoint: {
+				not: null // เอาเฉพาะสินค้าที่มีการตั้งค่าจุดสั่งซื้อ
+			}
+		},
+		include: {
+			supplier: true // ดึงข้อมูลผู้ขายมาด้วย
+		}
+	});
 
-export async function load() {
-  try {
-    // --- ใช้ Raw Query เพื่อเปรียบเทียบคอลัมน์ stockQuantity และ reorderPoint ---
-    const lowStockProductIds: { id: number }[] = await prisma.$queryRaw`
-      SELECT id FROM Product 
-      WHERE stockQuantity <= reorderPoint AND reorderPoint IS NOT NULL AND reorderPoint > 0
-    `;
+	// 2. กรองข้อมูลใน Server เพื่อหาเฉพาะสินค้าที่สต็อกต่ำกว่าหรือเท่ากับจุดสั่งซื้อ
+	const lowStockProductsFromDb = candidateProducts.filter(p => {
+        // ใช้ Non-null assertion (!) เพราะเรา query มาเฉพาะ reorderPoint ที่ไม่เป็น null แล้ว
+		return p.stockQuantity <= p.reorderPoint!; 
+	});
 
-    // ตอนนี้เราได้แค่ ID ของสินค้าที่สต็อกน้อย
-    const productIds = lowStockProductIds.map(p => p.id);
+	// 3. [สำคัญ] แปลงค่า Decimal เป็น Number ก่อนส่งข้อมูล
+	const lowStockProducts = lowStockProductsFromDb.map(p => ({
+		...p,
+		costPrice: p.costPrice.toNumber(),
+		retailPrice: p.retailPrice.toNumber(),
+		wholesalePrice: p.wholesalePrice ? p.wholesalePrice.toNumber() : null
+	}));
 
-    // ถ้าไม่มีสินค้าสต็อกน้อยเลย ก็ส่ง array ว่างกลับไป
-    if (productIds.length === 0) {
-      return { lowStockProducts: [] };
-    }
-    
-    // ดึงข้อมูลเต็มๆ ของสินค้าเหล่านั้นอีกครั้ง
-    const lowStockProducts = await prisma.product.findMany({
-      where: {
-        id: { in: productIds },
-      },
-      include: {
-        supplier: true,
-      },
-      orderBy: {
-        stockQuantity: 'asc',
-      },
-    });
-
-    return { lowStockProducts };
-
-  } catch (error) {
-    console.error("Failed to fetch low stock report:", error);
-    // กรณีเกิด Error ให้ส่ง array ว่างกลับไปเพื่อไม่ให้หน้าเว็บพัง
-    return { lowStockProducts: [] };
-  }
-}
+	return { lowStockProducts };
+};

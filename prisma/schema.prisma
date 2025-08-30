@@ -1,4 +1,4 @@
-// File: prisma/schema.prisma (Final Version with Purchase Order)
+// File: prisma/schema.prisma (Final Recommended Version)
 
 generator client {
   provider        = "prisma-client-js"
@@ -11,30 +11,34 @@ datasource db {
 }
 
 // ===============================================
-//  Enum: OrderStatus (สถานะของบิล)
+//  Enums (กลุ่มของค่าคงที่)
 // ===============================================
 enum OrderStatus {
-  COMPLETED // ขายสำเร็จ (จ่ายเงินสด)
-  CREDIT    // ขายเชื่อ (รอชำระเงิน)
-  HELD      // พักบิล
+  COMPLETED
+  CREDIT
+  HELD
+  CANCELLED
+}
+
+// [เพิ่มใหม่] สถานะของใบวางบิล
+enum BillingNoteStatus {
+  PENDING   // รอลูกค้าชำระ
+  PAID      // ชำระแล้ว
   CANCELLED // ยกเลิก
 }
+
 
 // ===============================================
 //  Model: PurchaseOrder (ใบสั่งซื้อ/ใบรับของ)
 // ===============================================
 model PurchaseOrder {
   id          Int                 @id @default(autoincrement())
-  poNumber    String              @unique // เลขที่ใบรับของ
+  poNumber    String              @unique
   notes       String?             @db.Text
-  totalCost   Decimal               // ต้นทุนรวม
+  totalCost   Decimal
   createdAt   DateTime            @default(now())
-
-  // ความสัมพันธ์กับผู้ขาย
   supplier    Supplier            @relation(fields: [supplierId], references: [id])
   supplierId  Int
-
-  // รายการสินค้าในใบรับของ
   items       PurchaseOrderItem[]
 }
 
@@ -43,18 +47,13 @@ model PurchaseOrder {
 // ===============================================
 model PurchaseOrderItem {
   id              Int           @id @default(autoincrement())
-  quantity        Int           // จำนวนที่รับเข้า
-  costPrice       Decimal         // ต้นทุนต่อหน่วย ณ ตอนที่รับ
-  
-  // ความสัมพันธ์กับใบรับของ
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  quantity        Int
+  costPrice       Decimal
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade) // [ปรับปรุง] เพิ่ม onDelete
   purchaseOrderId Int
-
-  // ความสัมพันธ์กับสินค้า
   product         Product       @relation(fields: [productId], references: [id])
   productId       Int
 }
-
 
 // ===============================================
 //  Model: Supplier (ข้อมูลผู้ขาย)
@@ -73,7 +72,7 @@ model Supplier {
   paymentTerms   String?
   imageUrl       String?
   products       Product[]
-  purchaseOrders PurchaseOrder[] // ความสัมพันธ์กับ PurchaseOrder
+  purchaseOrders PurchaseOrder[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
@@ -82,26 +81,26 @@ model Supplier {
 //  Model: Customer (ข้อมูลลูกค้า/สมาชิก)
 // ===============================================
 model Customer {
-  id                   Int       @id @default(autoincrement())
-  memberCode           String    @unique
+  id                   Int           @id @default(autoincrement())
+  memberCode           String        @unique
   title                String?
   firstName            String
   lastName             String?
-  nationalId           String?   @unique
+  nationalId           String?       @unique
   phone                String?
   email                String?
   dateOfBirth          DateTime?
   taxId                String?
   creditLimit          Decimal?
-  address              String?   @db.Text
-  shippingAddress      String?   @db.Text
-  notes                String?   @db.Text
+  address              String?       @db.Text
+  shippingAddress      String?       @db.Text
+  notes                String?       @db.Text
   imageUrl             String?
   membershipExpiryDate DateTime?
   orders               Order[]
   billingNotes         BillingNote[]
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 }
 
 // ===============================================
@@ -128,10 +127,11 @@ model Product {
   notes              String?               @db.Text
   imageUrl           String?
   allowPriceEdit     Boolean               @default(false)
-  supplier           Supplier              @relation(fields: [supplierId], references: [id])
-  supplierId         Int
+  // [ปรับปรุง] ทำให้ supplier เป็น optional (สามารถเป็น null ได้)
+  supplier           Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplierId         Int?
   OrderItems         OrderItem[]
-  purchaseOrderItems PurchaseOrderItem[] // ความสัมพันธ์กับ PurchaseOrderItem
+  purchaseOrderItems PurchaseOrderItem[]
   returns            ReturnItem[]
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
@@ -145,15 +145,16 @@ model Order {
   id              Int               @id @default(autoincrement())
   orderNumber     String            @unique
   total           Decimal
-  received        Decimal?            // <-- [เพิ่ม] เงินที่รับ
-  change          Decimal?            // <-- [เพิ่ม] เงินทอน
+  received        Decimal?
+  change          Decimal?
   status          OrderStatus       @default(COMPLETED)
   createdAt       DateTime          @default(now())
-  customer        Customer?         @relation(fields: [customerId], references: [id])
+  // [ปรับปรุง] เพิ่ม onDelete: SetNull เพื่อให้ลบ Customer ได้
+  customer        Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
   customerId      Int?
   items           OrderItem[]
   billingNoteItem BillingNoteItem?
-  returns         ProductReturn[] // <--- [เพิ่มบรรทัดนี้]
+  returns         ProductReturn[]
 }
 
 // ===============================================
@@ -163,42 +164,39 @@ model OrderItem {
   id               Int     @id @default(autoincrement())
   quantity         Int
   price            Decimal
-  discount         Decimal   @default(0)
-  order            Order   @relation(fields: [orderId], references: [id])
+  discount         Decimal @default(0)
+  order            Order   @relation(fields: [orderId], references: [id], onDelete: Cascade) // [ปรับปรุง] เพิ่ม onDelete
   orderId          Int
   product          Product @relation(fields: [productId], references: [id])
   productId        Int
-  returnedQuantity Int     @default(0) // <--- [เพิ่มบรรทัดนี้]
+  returnedQuantity Int     @default(0)
 }
+
 // ===============================================
-// [เพิ่มใหม่] ตารางสำหรับเก็บข้อมูล "หัวบิล" การรับคืน
+//  Model: ProductReturn (หัวบิลการรับคืน)
 // ===============================================
 model ProductReturn {
-  id                Int      @id @default(autoincrement())
-  originalOrderId   Int      // ID ของบิลขายต้นฉบับ
-  totalRefundAmount Decimal  // ยอดเงินที่คืนทั้งหมดในครั้งนี้
-  reason            String?  // เหตุผลการคืน (ถ้ามี)
-  createdAt         DateTime @default(now())
-
-  originalOrder Order        @relation(fields: [originalOrderId], references: [id], onDelete: Cascade)
-  items         ReturnItem[]
-
+  id                Int          @id @default(autoincrement())
+  originalOrderId   Int
+  totalRefundAmount Decimal
+  reason            String?
+  createdAt         DateTime     @default(now())
+  originalOrder     Order        @relation(fields: [originalOrderId], references: [id], onDelete: Cascade)
+  items             ReturnItem[]
   @@map("product_returns")
 }
 
 // ===============================================
-// [เพิ่มใหม่] ตารางสำหรับเก็บ "รายการสินค้า" ที่รับคืน
+//  Model: ReturnItem (รายการสินค้าที่รับคืน)
 // ===============================================
 model ReturnItem {
-  id              Int     @id @default(autoincrement())
-  productReturnId Int     // ID ของหัวบิลการคืน
-  productId       Int     // ID ของสินค้า
-  quantity        Int     // จำนวนที่คืน
-  priceAtReturn   Decimal // ราคาต่อหน่วย ณ ตอนที่คืน (ดึงจากบิลเก่า)
-
-  productReturn ProductReturn @relation(fields: [productReturnId], references: [id], onDelete: Cascade)
-  product       Product       @relation(fields: [productId], references: [id])
-
+  id              Int           @id @default(autoincrement())
+  productReturnId Int
+  productId       Int
+  quantity        Int
+  priceAtReturn   Decimal
+  productReturn   ProductReturn @relation(fields: [productReturnId], references: [id], onDelete: Cascade)
+  product         Product       @relation(fields: [productId], references: [id])
   @@map("return_items")
 }
 
@@ -206,11 +204,11 @@ model ReturnItem {
 //  Models สำหรับ Authentication (Lucia Auth)
 // ===============================================
 model User {
-  id        String    @id
-  username  String    @unique
-  password  String
-  role      String    @default("USER")
-  sessions  Session[]
+  id       String    @id
+  username String    @unique
+  password String
+  role     String    @default("USER")
+  sessions Session[]
 }
 
 model Session {
@@ -221,33 +219,29 @@ model Session {
 }
 
 // ===============================================
-//  [เพิ่มใหม่] Model: BillingNote (ใบวางบิล/ใบแจ้งหนี้)
+//  Model: BillingNote (ใบวางบิล/ใบแจ้งหนี้)
 // ===============================================
 model BillingNote {
   id          Int               @id @default(autoincrement())
-  bnNumber    String            @unique // เลขที่ใบวางบิล
-  totalAmount Decimal             // ยอดรวมของใบวางบิล
+  bnNumber    String            @unique
+  totalAmount Decimal
+  // [เพิ่ม] สถานะและวันที่ชำระ
+  status      BillingNoteStatus @default(PENDING)
+  paidAt      DateTime?
   createdAt   DateTime          @default(now())
-
-  // ความสัมพันธ์กับลูกค้า
-  customer    Customer          @relation(fields: [customerId], references: [id])
+  // [ปรับปรุง] เพิ่ม onDelete: Cascade เพื่อให้ลบตาม Customer
+  customer    Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
   customerId  Int
-
-  // รายการบิลที่อยู่ในใบวางบิลนี้
   items       BillingNoteItem[]
 }
 
 // ===============================================
-//  [เพิ่มใหม่] Model: BillingNoteItem (รายการบิลในใบวางบิล)
+//  Model: BillingNoteItem (รายการบิลในใบวางบิล)
 // ===============================================
 model BillingNoteItem {
   id            Int         @id @default(autoincrement())
-
-  // ความสัมพันธ์กับใบวางบิล
-  billingNote   BillingNote @relation(fields: [billingNoteId], references: [id])
+  billingNote   BillingNote @relation(fields: [billingNoteId], references: [id], onDelete: Cascade) // [ปรับปรุง] เพิ่ม onDelete
   billingNoteId Int
-
-  // ความสัมพันธ์กับบิลเดิม
   order         Order       @relation(fields: [orderId], references: [id])
-  orderId       Int         @unique // 1 บิล สามารถอยู่ในใบวางบิลได้แค่ 1 ใบ
+  orderId       Int         @unique
 }

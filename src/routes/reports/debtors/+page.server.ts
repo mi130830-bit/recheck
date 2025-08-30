@@ -1,51 +1,55 @@
-// Path: src/routes/reports/debtors/+page.server.ts (Final Corrected Version)
+// Path: src/routes/reports/debtors/+page.server.ts (Final Corrected Logic)
 
 import { db } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => {
-	// 1. หายอดรวมและจำนวนบิลที่ค้างชำระของลูกค้าแต่ละคน
-	const debtorsAggregates = await db.order.groupBy({
-		by: ['customerId'],
+	// 1. ค้นหา "ลูกค้า" ทั้งหมดที่มี "อย่างน้อย 1 ออเดอร์" ที่มีสถานะเป็น 'CREDIT'
+	const customersWithDebt = await db.customer.findMany({
 		where: {
-			status: 'CREDIT'
+			orders: {
+				some: { // 'some' หมายถึง "มีอย่างน้อย 1 รายการที่ตรงเงื่อนไข"
+					status: 'CREDIT'
+				}
+			}
 		},
-		_count: {
-			id: true
-		},
-		_sum: {
-			total: true
-		}
-	});
-
-	// 2. ดึงข้อมูลลูกค้าที่มีหนี้ค้าง
-	// filter(Boolean) as number[] เป็น trick ในการกรองค่า null/undefined ออกไป
-	const customerIds = debtorsAggregates.map((d) => d.customerId).filter(Boolean) as number[];
-	
-	const customers = await db.customer.findMany({
-		where: {
-			id: {
-				in: customerIds
+		include: {
+			// 2. ดึงข้อมูล "เฉพาะ" ออเดอร์ที่เป็น 'CREDIT' ของลูกค้าแต่ละคนมาด้วย
+			_count: {
+				select: {
+					orders: {
+						where: { status: 'CREDIT' }
+					}
+				}
+			},
+			orders: {
+				where: {
+					status: 'CREDIT'
+				},
+				select: {
+					total: true
+				}
 			}
 		}
 	});
 
-	// 3. นำข้อมูล 2 ส่วนมารวมกัน และแปลงค่า Decimal เป็น Number
-	const debtors = customers.map((customer) => {
-		const aggregate = debtorsAggregates.find((agg) => agg.customerId === customer.id);
-		
-		return {
-			...customer,
-			// [แก้ไข] แปลงค่า Decimal ที่อาจมีใน customer object ด้วย
-			creditLimit: customer.creditLimit ? customer.creditLimit.toNumber() : null,
+	// 3. จัดรูปแบบข้อมูลให้พร้อมใช้งาน และแปลงค่า Decimal
+	const debtors = customersWithDebt.map(customer => {
+		// คำนวณยอดหนี้รวมจากบิล 'CREDIT' ทั้งหมดของลูกค้าคนนี้
+		const totalDebt = customer.orders.reduce((sum, order) => {
+			return sum + order.total.toNumber();
+		}, 0);
 
-			billCount: aggregate?._count.id || 0,
-			
-			// [แก้ไขจุดสำคัญ] แปลงค่า total ที่ได้จากการ _sum ให้เป็น Number
-			totalDebt: aggregate?._sum.total ? aggregate._sum.total.toNumber() : 0
+		return {
+			customerId: customer.id,
+			memberCode: customer.memberCode,
+			name: `${customer.firstName} ${customer.lastName || ''}`.trim(), 
+			phone: customer.phone || '-',
+			// ใช้ _count ที่เราดึงมาเพื่อนับจำนวนบิล
+			billCount: customer._count.orders, 
+			totalDebt: totalDebt
 		};
 	});
 
-	// 4. ส่งข้อมูลที่แปลงค่าแล้วออกไป
 	return { debtors };
 };

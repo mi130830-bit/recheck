@@ -1,11 +1,10 @@
-// Path: src/routes/products/import/+page.server.ts (Final Row-by-Row Supplier Version)
+// Path: src/routes/products/import/+page.server.ts (Final Corrected Version)
 
 import { db } from '$lib/server/db';
 import { fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import * as xlsx from 'xlsx';
 
-// Load function ไม่จำเป็นต้องส่งข้อมูล suppliers แล้ว เพราะเราจะหาจากในไฟล์แทน
 export const load: PageServerLoad = async () => {
 	return {}; 
 };
@@ -20,9 +19,7 @@ export const actions: Actions = {
 		}
 
 		try {
-			// --- ขั้นตอนที่ 1: เตรียมข้อมูลผู้ขายสำหรับค้นหา ---
-			const allSuppliers = await db.supplier.findMany();
-			// สร้าง Map เพื่อให้ค้นหา id จาก name ได้เร็วขึ้น (ไม่สนตัวพิมพ์เล็ก/ใหญ่)
+			const allSuppliers = await db.supplier.findMany({ select: { id: true, name: true } });
 			const supplierMap = new Map(allSuppliers.map(s => [s.name.trim().toLowerCase(), s.id]));
 
 			const buffer = Buffer.from(await file.arrayBuffer());
@@ -38,24 +35,24 @@ export const actions: Actions = {
 			const productsToCreate = [];
 			const errors: string[] = [];
 
-			// --- ขั้นตอนที่ 2: วนลูปประมวลผลแต่ละแถว ---
 			for (const [index, row] of data.entries()) {
 				if (!row['ชื่อสินค้า']) {
-					continue; // ข้ามแถวที่ไม่มีชื่อสินค้า
-				}
-
-				const supplierName = String(row['ผู้ขายสินค้า'] || '').trim().toLowerCase();
-				if (!supplierName) {
-					errors.push(`แถวที่ ${index + 2}: ไม่ได้ระบุชื่อผู้ขายสินค้า`);
 					continue;
 				}
 
-				const supplierId = supplierMap.get(supplierName);
-				if (!supplierId) {
-					errors.push(`แถวที่ ${index + 2}: ไม่พบผู้ขายชื่อ "${row['ผู้ขายสินค้า']}" ในระบบ`);
-					continue;
-				}
+				const supplierNameRaw = String(row['ผู้ขายสินค้า'] || '').trim();
+				let supplierId: number | null = null; 
 
+				if (supplierNameRaw) {
+					const foundSupplierId = supplierMap.get(supplierNameRaw.toLowerCase());
+					if (foundSupplierId) {
+						supplierId = foundSupplierId;
+					} else {
+						errors.push(`แถวที่ ${index + 2}: ไม่พบผู้ขายชื่อ "${supplierNameRaw}" ในระบบ`);
+						continue;
+					}
+				}
+				
 				productsToCreate.push({
 					barcode: String(row['รหัสบาร์โค้ด'] || ''),
 					name: String(row['ชื่อสินค้า']),
@@ -68,30 +65,38 @@ export const actions: Actions = {
 					unit: String(row['หน่วย'] || 'ชิ้น'),
 					reorderPoint: Number(row['จุดสั่งซื้อ'] || null),
 					notes: String(row['หมายเหตุ'] || ''),
-					supplierId: supplierId // << ใช้ ID ที่หาเจอ
+					supplierId: supplierId
 				});
 			}
 
 			if (productsToCreate.length === 0 && errors.length > 0) {
 				return fail(400, { success: false, message: 'ไม่สามารถนำเข้าข้อมูลได้:\n' + errors.join('\n') });
 			}
-
-			// --- ขั้นตอนที่ 3: บันทึกข้อมูล ---
-			const result = await db.product.createMany({
-				data: productsToCreate,
-				skipDuplicates: true
-			});
-
-			let finalMessage = `นำเข้าข้อมูลสำเร็จ ${result.count} รายการ!`;
+			
+			let resultCount = 0;
+			if (productsToCreate.length > 0) {
+				const result = await db.product.createMany({
+					data: productsToCreate as any,
+					skipDuplicates: true
+				});
+				resultCount = result.count;
+			}
+			
+			let finalMessage = `นำเข้าข้อมูลสำเร็จ ${resultCount} รายการ`;
 			if (errors.length > 0) {
-				finalMessage += `\n\nเกิดข้อผิดพลาดกับบางรายการ:\n` + errors.join('\n');
+				const errorMessage = `เกิดข้อผิดพลาดกับบางรายการ (ไม่ถูกนำเข้า):\n` + errors.join('\n');
+				finalMessage = resultCount > 0 ? `${finalMessage}\n\n${errorMessage}` : errorMessage;
+				return fail(400, { success: false, message: finalMessage });
 			}
 
 			return { success: true, message: finalMessage };
 
-		} catch (err) {
+		} catch (err: any) {
 			console.error('Excel import error:', err);
-			return fail(500, { success: false, message: 'เกิดข้อผิดพลาดในการประมวลผลไฟล์' });
+			if (err.code === 'P2003') {
+				return fail(400, { success: false, message: 'เกิดข้อผิดพลาด: Foreign key constraint failed. ตรวจสอบว่า supplierId ถูกต้อง' });
+			}
+			return fail(500, { success: false, message: 'เกิดข้อผิดพลาดร้ายแรงในการประมวลผลไฟล์' });
 		}
 	}
 };

@@ -1,4 +1,4 @@
-<!-- File: src/routes/suppliers/+page.svelte -->
+<!-- File: src/routes/suppliers/+page.svelte (Final Corrected Version) -->
 
 <script lang="ts">
   import { enhance } from '$app/forms';
@@ -6,13 +6,17 @@
 </script>
 
 <main class="container">
+  <!-- [แก้ไข] เพิ่ม div.button-group เพื่อจัดกลุ่มปุ่ม -->
   <header class="header-container">
     <h1>จัดการข้อมูลผู้ขาย</h1>
-    <a href="/suppliers/new" role="button">+ เพิ่มผู้ขายใหม่</a>
+    <div class="button-group">
+      <!-- [เพิ่ม] ปุ่มสำหรับไปหน้า Import -->
+      <a href="/suppliers/import" role="button" class="secondary outline">นำเข้าจาก Excel</a>
+      <a href="/suppliers/new" role="button">+ เพิ่มผู้ขายใหม่</a>
+    </div>
   </header>
 
   {#if data.form?.message}
-    <!-- แสดงข้อความ Error จาก action ลบ -->
     <aside class="error-message">
         <p>{data.form.message}</p>
     </aside>
@@ -40,10 +44,7 @@
             <td>{supplier.taxId || '-'}</td>
             <td>
               <div class="action-buttons">
-                <!-- 1. ลิงก์ไปยังหน้าแก้ไข -->
                 <a href="/suppliers/{supplier.id}/edit" role="button" class="outline">แก้ไข</a>
-                
-                <!-- 2. ฟอร์มสำหรับส่งคำสั่งลบ -->
                 <form 
                   method="POST" 
                   action="?/delete" 
@@ -67,8 +68,15 @@
 </main>
 
 <style>
-  .container { max-width: 960px; margin: 0 auto; }
+  .container { max-width: 960px; margin: 2rem auto; }
   .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  
+  /* [เพิ่ม] CSS สำหรับจัดกลุ่มปุ่ม */
+  .button-group {
+    display: flex;
+    gap: 0.5rem; /* เพิ่มช่องว่างระหว่างปุ่ม */
+  }
+  
   .action-buttons { display: flex; gap: 0.5rem; }
   .action-buttons form { margin: 0; }
   .error-message {

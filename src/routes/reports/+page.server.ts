@@ -1,6 +1,6 @@
-// File: src/routes/reports/+page.server.ts (Final Corrected Version)
+// Path: src/routes/reports/+page.server.ts (Final Corrected Version)
 
-import { db } from '$lib/server/db'; // [แก้ไข] ใช้ db จากที่เดียว ไม่สร้าง PrismaClient ใหม่
+import { db } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => {
@@ -31,7 +31,9 @@ export const load: PageServerLoad = async () => {
     include: { customer: true },
   });
 
-  // [จุดแก้ไขที่ 1] สร้าง object stats และแปลงค่า Decimal เป็น Number
+  // --- 4. [สำคัญ] แปลงค่า Decimal ทั้งหมด ---
+  
+  // แปลงค่าใน stats
   const stats = {
     todayRevenue: todaySales._sum.total ? todaySales._sum.total.toNumber() : 0,
     todayOrders: todaySales._count._all,
@@ -39,15 +41,25 @@ export const load: PageServerLoad = async () => {
     allTimeOrders: allTimeSales._count._all,
   };
 
-  // [จุดแก้ไขที่ 2] แปลงค่า Decimal ใน array recentOrders
-  const recentOrders = recentOrdersFromDb.map(order => ({
-    ...order,
-    total: order.total.toNumber(),
-    received: order.received ? order.received.toNumber() : null,
-    change: order.change ? order.change.toNumber() : null,
-  }));
+  // แปลงค่าใน recentOrders และข้อมูล customer ที่ซ้อนอยู่ข้างใน
+  const recentOrders = recentOrdersFromDb.map(order => {
+    const serializableCustomer = order.customer
+      ? {
+          ...order.customer,
+          creditLimit: order.customer.creditLimit ? order.customer.creditLimit.toNumber() : null
+        }
+      : null;
 
-  // 4. ส่งข้อมูลที่แปลงค่าเรียบร้อยแล้วทั้งหมดออกไป
+    return {
+      ...order,
+      total: order.total.toNumber(),
+      received: order.received ? order.received.toNumber() : null,
+      change: order.change ? order.change.toNumber() : null,
+      customer: serializableCustomer
+    };
+  });
+
+  // --- 5. ส่งข้อมูลที่แปลงค่าเรียบร้อยแล้วทั้งหมดออกไป ---
   return {
     stats,
     recentOrders,

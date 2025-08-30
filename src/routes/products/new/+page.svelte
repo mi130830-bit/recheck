@@ -1,14 +1,16 @@
-<!-- File: src/routes/products/new/+page.svelte (ฉบับ Layout คู่) -->
+<!-- File: src/routes/products/new/+page.svelte (Final Corrected Version) -->
 
 <script lang="ts">
   import { enhance } from '$app/forms';
-  import { page } from '$app/stores';
-
-  export let data;
-  let barcode: string | null = null;
+  import type { PageData } from './$types';
+  
+  export let data: PageData;
+  export let form;
+  
+  let barcode: string | null = form?.barcode ?? null;
 
   function generateBarcode() {
-    const timestamp = Date.now();
+    const timestamp = Date.now().toString().slice(-8);
     const randomNumber = Math.floor(100 + Math.random() * 900);
     barcode = `${timestamp}${randomNumber}`;
   }
@@ -16,18 +18,19 @@
 
 <main class="container">
   <article>
-    <header>
+    <header class="page-header">
       <h2>เพิ่มรายการสินค้า</h2>
+      <a href="/products/import" role="button" class="secondary outline">
+        เพิ่มหลายรายการ (Excel)
+      </a>
     </header>
 
     <form method="POST" use:enhance>
-      {#if $page.form?.message}
-        <p class="error">{$page.form.message}</p>
+      {#if form?.error}
+        <p class="error">{form.error}</p>
       {/if}
 
-      <!-- ==== Layout หลักแบบ 2 คอลัมน์ ==== -->
       <div class="form-grid">
-        <!-- คู่ที่ 1 -->
         <div>
           <label for="barcode">รหัสบาร์โค้ด</label>
           <div class="barcode-group">
@@ -37,10 +40,9 @@
         </div>
         <div>
           <label for="name">* ชื่อสินค้า</label>
-          <input type="text" id="name" name="name" required />
+          <input type="text" id="name" name="name" value={form?.name ?? ''} required />
         </div>
 
-        <!-- คู่ที่ 2 -->
         <div>
           <label for="alias">ชื่อย่อ/รหัสค้นหา</label>
           <input type="text" id="alias" name="alias" />
@@ -50,7 +52,6 @@
           <input type="text" id="category" name="category" />
         </div>
 
-        <!-- คู่ที่ 3 -->
         <div>
           <label for="costPrice">* ต้นทุน</label>
           <input type="number" step="0.01" id="costPrice" name="costPrice" value="0.00" required />
@@ -60,7 +61,6 @@
           <input type="number" step="0.01" id="retailPrice" name="retailPrice" required />
         </div>
 
-        <!-- คู่ที่ 4 -->
         <div>
           <label for="wholesalePrice">ราคาส่ง</label>
           <input type="number" step="0.01" id="wholesalePrice" name="wholesalePrice" />
@@ -68,13 +68,12 @@
         <div>
           <label for="vatType">Vat</label>
           <select id="vatType" name="vatType">
+            <option value="none">ไม่มี Vat</option>
             <option value="include">ราคารวม Vat</option>
             <option value="exclude">ราคาไม่รวม Vat</option>
-            <option value="none">ไม่มี Vat</option>
           </select>
         </div>
         
-        <!-- คู่ที่ 5 -->
         <div>
             <label for="stockQuantity">* จำนวนสินค้า</label>
             <input type="number" id="stockQuantity" name="stockQuantity" value="0" required />
@@ -84,7 +83,6 @@
             <input type="text" id="unit" name="unit" placeholder="เช่น ชิ้น, กก." />
         </div>
         
-        <!-- คู่ที่ 6 -->
         <div>
             <label for="reorderPoint">จุดสั่งซื้อ</label>
             <input type="number" id="reorderPoint" name="reorderPoint" />
@@ -96,7 +94,6 @@
 
       </div>
 
-      <!-- ==== ส่วนที่เหลือ (เต็มความกว้าง) ==== -->
       <fieldset>
         <label for="supplierId">* ผู้ขายสินค้า</label>
         <select id="supplierId" name="supplierId" required>
@@ -125,25 +122,12 @@
 
 <style>
   .container { max-width: 960px; margin: 2rem auto; }
-  .error { color: var(--pico-color-red-500); background-color: var(--pico-color-red-100); padding: 0.75rem; border-radius: var(--pico-border-radius); }
-  
-  /* Grid หลักสำหรับแบ่ง 2 คอลัมน์ */
-  .form-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem 2rem;
-    margin-bottom: 1.5rem;
-  }
-  
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  .page-header h2, .page-header a { margin-bottom: 0; }
+  .error { color: var(--pico-color-red-500); background-color: var(--pico-form-element-invalid-background-color); padding: 0.75rem; border-radius: var(--pico-border-radius); border-left: 4px solid var(--pico-invalid-border-color); }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem 2rem; margin-bottom: 1.5rem; }
   .barcode-group { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: stretch; }
   .barcode-group input, .barcode-group button { margin-bottom: 0; }
-
   fieldset { padding: 0; border: none; }
-  
-  /* จัดกลุ่ม Checkbox ให้อยู่ข้างกัน */
-  .checkbox-group {
-      display: flex;
-      gap: 2rem;
-      margin-top: 1rem;
-  }
+  .checkbox-group { display: flex; gap: 2rem; margin-top: 1rem; }
 </style>

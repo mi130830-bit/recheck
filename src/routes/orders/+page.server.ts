@@ -1,10 +1,10 @@
-// File: src/routes/orders/+page.server.ts (Final Corrected Version)
+// Path: src/routes/orders/+page.server.ts (Final Corrected Version)
 
-import { db } from '$lib/server/db'; // [แก้ไข] ใช้ db จากที่เดียว ไม่สร้าง PrismaClient ใหม่
+import { db } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => {
-  // 1. ดึงข้อมูล Order ทั้งหมดจากฐานข้อมูล
+  // 1. ดึงข้อมูล Order ทั้งหมดจากฐานข้อมูล พร้อมกับข้อมูล "ลูกค้า"
   const ordersFromDb = await db.order.findMany({
     include: {
       customer: true,
@@ -14,15 +14,28 @@ export const load: PageServerLoad = async () => {
     },
   });
 
-  // 2. [จุดแก้ไขสำคัญ] แปลงค่า Decimal เป็น Number ก่อนส่งข้อมูลไปที่หน้าเว็บ
-  const orders = ordersFromDb.map(order => ({
-    ...order, // คัดลอกข้อมูลเดิมทั้งหมด
-    // เขียนทับเฉพาะ field ที่เป็น Decimal
-    total: order.total.toNumber(),
-    received: order.received ? order.received.toNumber() : null,
-    change: order.change ? order.change.toNumber() : null,
-  }));
+  // 2. [จุดแก้ไขสำคัญ] แปลงค่า Decimal ทั้งใน Order และใน Customer ที่ซ้อนอยู่
+  const orders = ordersFromDb.map(order => {
+    // แปลงข้อมูล customer ก่อน (ถ้ามี)
+    const serializableCustomer = order.customer 
+      ? {
+          ...order.customer,
+          creditLimit: order.customer.creditLimit ? order.customer.creditLimit.toNumber() : null
+        } 
+      : null;
 
-  // 3. ส่งข้อมูลที่แปลงค่าแล้วออกไป
+    // สร้าง object order ใหม่ที่สมบูรณ์
+    return {
+      ...order,
+      // เขียนทับ field ที่เป็น Decimal ของ Order
+      total: order.total.toNumber(),
+      received: order.received ? order.received.toNumber() : null,
+      change: order.change ? order.change.toNumber() : null,
+      // เขียนทับ customer object ทั้งหมดด้วย object ที่เราเพิ่งแปลงค่า
+      customer: serializableCustomer
+    };
+  });
+
+  // 3. ส่งข้อมูลที่แปลงค่าแล้วทั้งหมดออกไป
   return { orders };
 }

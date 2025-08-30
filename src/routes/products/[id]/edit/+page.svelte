@@ -1,19 +1,20 @@
-<!-- File: src/routes/products/[id]/edit/+page.svelte (ฉบับ Layout คู่) -->
+<!-- File: src/routes/products/[id]/edit/+page.svelte (Final Corrected Version) -->
 
 <script lang="ts">
   import { enhance } from '$app/forms';
-  import { page } from '$app/stores';
-  export let data;
+  import type { PageData } from './$types';
+  
+  export let data: PageData;
+  export let form;
 
-  let barcode: string | null = data.product.barcode;
+  // สร้าง state สำหรับค่าที่ bind ได้
+  // ไม่ต้องมี barcode แล้ว เพราะเราไม่แก้ไขมัน
+  let supplierId = data.product.supplierId;
+  let vatType = data.product.vatType ?? 'none';
   let notTrackStock = !data.product.trackStock;
   let allowPriceEdit = data.product.allowPriceEdit;
 
-  function generateBarcode() {
-    const timestamp = Date.now();
-    const randomNumber = Math.floor(100 + Math.random() * 900);
-    barcode = `${timestamp}${randomNumber}`;
-  }
+  // [ลบออก] ฟังก์ชัน generateBarcode() ไม่ได้ใช้แล้ว
 </script>
 
 <main class="container">
@@ -22,27 +23,32 @@
       <h2>แก้ไขข้อมูลสินค้า: {data.product.name}</h2>
     </header>
 
+    <!-- [แก้ไข] เปลี่ยน action เป็น ?/update เพื่อให้ตรงกับ +page.server.ts -->
     <form method="POST" action="?/update" use:enhance>
-      {#if $page.form?.message}
-        <p class="error">{$page.form.message}</p>
+      {#if form?.error}
+        <p class="error">{form.error}</p>
       {/if}
 
-      <!-- ==== Layout หลักแบบ 2 คอลัมน์ ==== -->
       <div class="form-grid">
-        <!-- คู่ที่ 1 -->
+        <!-- [แก้ไข] เปลี่ยน input ของ barcode เป็น readonly และลบปุ่ม "สร้างใหม่" -->
         <div>
-          <label for="barcode">รหัสบาร์โค้ด</label>
-          <div class="barcode-group">
-            <input type="text" id="barcode" name="barcode" bind:value={barcode} />
-            <button type="button" on:click={generateBarcode} class="secondary outline">สร้างใหม่</button>
-          </div>
+          <label for="barcode">รหัสบาร์โค้ด (ไม่สามารถแก้ไขได้)</label>
+          <input 
+            type="text" 
+            id="barcode" 
+            name="barcode" 
+            value={data.product.barcode || 'ไม่มี'} 
+            readonly 
+            disabled
+          />
         </div>
         <div>
           <label for="name">* ชื่อสินค้า</label>
           <input type="text" id="name" name="name" required value={data.product.name} />
         </div>
 
-        <!-- คู่ที่ 2 -->
+        <!-- ... ส่วนที่เหลือของฟอร์มเหมือนเดิมทุกประการ ... -->
+        
         <div>
           <label for="alias">ชื่อย่อ/รหัสค้นหา</label>
           <input type="text" id="alias" name="alias" value={data.product.alias || ''} />
@@ -52,7 +58,6 @@
           <input type="text" id="category" name="category" value={data.product.category || ''} />
         </div>
 
-        <!-- คู่ที่ 3 -->
         <div>
           <label for="costPrice">* ต้นทุน</label>
           <input type="number" step="0.01" id="costPrice" name="costPrice" required value={data.product.costPrice} />
@@ -62,21 +67,19 @@
           <input type="number" step="0.01" id="retailPrice" name="retailPrice" required value={data.product.retailPrice} />
         </div>
 
-        <!-- คู่ที่ 4 -->
         <div>
           <label for="wholesalePrice">ราคาส่ง</label>
           <input type="number" step="0.01" id="wholesalePrice" name="wholesalePrice" value={data.product.wholesalePrice || ''} />
         </div>
         <div>
           <label for="vatType">Vat</label>
-          <select id="vatType" name="vatType" bind:value={data.product.vatType}>
+          <select id="vatType" name="vatType" bind:value={vatType}>
+            <option value="none">ไม่มี Vat</option>
             <option value="include">ราคารวม Vat</option>
             <option value="exclude">ราคาไม่รวม Vat</option>
-            <option value="none">ไม่มี Vat</option>
           </select>
         </div>
         
-        <!-- คู่ที่ 5 -->
         <div>
             <label for="stockQuantity">* จำนวนสินค้า</label>
             <input type="number" id="stockQuantity" name="stockQuantity" required value={data.product.stockQuantity} />
@@ -86,7 +89,6 @@
             <input type="text" id="unit" name="unit" placeholder="เช่น ชิ้น, กก." value={data.product.unit || ''} />
         </div>
         
-        <!-- คู่ที่ 6 -->
         <div>
             <label for="reorderPoint">จุดสั่งซื้อ</label>
             <input type="number" id="reorderPoint" name="reorderPoint" value={data.product.reorderPoint || ''} />
@@ -97,10 +99,9 @@
         </div>
       </div>
 
-      <!-- ==== ส่วนที่เหลือ (เต็มความกว้าง) ==== -->
       <fieldset>
         <label for="supplierId">* ผู้ขายสินค้า</label>
-        <select id="supplierId" name="supplierId" required bind:value={data.product.supplierId}>
+        <select id="supplierId" name="supplierId" required bind:value={supplierId}>
           <option value="" disabled>-- กรุณาเลือก --</option>
           {#each data.suppliers as supplier (supplier.id)}
             <option value={supplier.id}>{supplier.name}</option>
@@ -125,11 +126,16 @@
 </main>
 
 <style>
-  .container { max-width: 960px; margin: 0 auto; }
-  .error { color: var(--pico-form-element-invalid-color); }
+  .container { max-width: 960px; margin: 2rem auto; }
+  .error { color: var(--pico-color-red-500); background-color: var(--pico-form-element-invalid-background-color); padding: 0.75rem; border-radius: var(--pico-border-radius); border-left: 4px solid var(--pico-invalid-border-color); }
   .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem 2rem; margin-bottom: 1.5rem; }
-  .barcode-group { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: stretch; }
-  .barcode-group input, .barcode-group button { margin-bottom: 0; }
+  /* [ลบออก] .barcode-group ไม่ได้ใช้แล้ว */
   fieldset { padding: 0; border: none; }
   .checkbox-group { display: flex; gap: 2rem; margin-top: 1rem; }
+  
+  /* [เพิ่ม] ทำให้ input ที่ readonly ดูแตกต่าง */
+  input[readonly] {
+    background-color: var(--pico-muted-background-color);
+    cursor: not-allowed;
+  }
 </style>

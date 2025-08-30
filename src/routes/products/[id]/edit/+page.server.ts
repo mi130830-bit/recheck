@@ -1,90 +1,75 @@
-// File: src/routes/products/[id]/edit/+page.server.ts
-import { PrismaClient } from '@prisma/client';
+// Path: src/routes/products/[id]/edit/+page.server.ts (Final Corrected Version)
+
+import { db } from '$lib/server/db';
 import { error, fail, redirect } from '@sveltejs/kit';
+import type { PageServerLoad, Actions } from './$types';
 
-const prisma = new PrismaClient();
-
-export async function load({ params }) {
-  try {
-    const product = await prisma.product.findUnique({
-      where: { id: Number(params.id) },
-    });
-    if (!product) throw error(404, 'ไม่พบข้อมูลสินค้า');
-    
-    // ดึงรายชื่อผู้ขายทั้งหมดมาด้วย เพื่อใช้ใน Dropdown
-    const suppliers = await prisma.supplier.findMany({ orderBy: { name: 'asc' } });
-    
-    // แปลงวันที่สำหรับ input
-    const expiryDateString = product.expiryDate ? product.expiryDate.toISOString().split('T')[0] : null;
-
-    return { product: { ...product, expiryDateString }, suppliers };
-  } catch {
+export const load: PageServerLoad = async ({ params }) => {
+  const productId = Number(params.id);
+  if (isNaN(productId)) {
     throw error(404, 'ไม่พบข้อมูลสินค้า');
   }
-}
 
-export const actions = {
-  update: async ({ request, params }) => {
+  const productFromDb = await db.product.findUnique({
+    where: { id: productId },
+  });
+
+  if (!productFromDb) {
+    throw error(404, 'ไม่พบข้อมูลสินค้า');
+  }
+
+  const suppliers = await db.supplier.findMany({ orderBy: { name: 'asc' } });
+
+  const product = {
+    ...productFromDb,
+    costPrice: productFromDb.costPrice.toNumber(),
+    retailPrice: productFromDb.retailPrice.toNumber(),
+    wholesalePrice: productFromDb.wholesalePrice ? productFromDb.wholesalePrice.toNumber() : null,
+  };
+
+  return { product, suppliers };
+};
+
+export const actions: Actions = {
+  default: async ({ request, params }) => {
     const data = await request.formData();
-
-    // --- 1. ดึงข้อมูลจากฟอร์มให้ครบทุก field ---
     const name = data.get('name') as string;
-    const alias = data.get('alias') as string | null;
-    const barcode = data.get('barcode') as string | null;
-    const category = data.get('category') as string | null;
-    const unit = data.get('unit') as string | null;
-    const costPrice = parseFloat(data.get('costPrice') as string);
-    const retailPrice = parseFloat(data.get('retailPrice') as string);
-    const wholesalePriceStr = data.get('wholesalePrice') as string;
-    const vatType = data.get('vatType') as string | null;
-    const stockQuantity = parseInt(data.get('stockQuantity') as string);
-    const trackStock = data.get('trackStock') === 'on'; // Checkbox value is 'on' when checked
-    const reorderPointStr = data.get('reorderPoint') as string;
-    const shelfLocation = data.get('shelfLocation') as string | null;
-    const expiryDateStr = data.get('expiryDate') as string;
-    const notes = data.get('notes') as string | null;
-    const allowPriceEdit = data.get('allowPriceEdit') === 'on';
-    const supplierId = parseInt(data.get('supplierId') as string);
-
-        // --- 2. ตรวจสอบและแปลงชนิดข้อมูล ---
-    if (!name || isNaN(costPrice) || isNaN(retailPrice) || isNaN(stockQuantity) || isNaN(supplierId)) {
-      return fail(400, { message: 'กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน' });
+    const supplierIdStr = data.get('supplierId') as string;
+    
+    if (!name || !supplierIdStr) {
+      return fail(400, { error: 'กรุณากรอกข้อมูล * ให้ครบถ้วน' });
     }
 
-    const wholesalePrice = wholesalePriceStr ? parseFloat(wholesalePriceStr) : null;
-    const reorderPoint = reorderPointStr ? parseInt(reorderPointStr) : null;
-    const expiryDate = expiryDateStr ? new Date(expiryDateStr) : null;
-    
     try {
-      // --- 3. อัปเดตข้อมูลในฐานข้อมูลให้ครบทุก field ---
-      await prisma.product.update({
+      await db.product.update({
         where: { id: Number(params.id) },
         data: {
           name,
-          alias,
-          barcode,
-          category,
-          unit,
-          costPrice,
-          retailPrice,
-          wholesalePrice,
-          vatType,
-          stockQuantity,
-          trackStock,
-          reorderPoint,
-          shelfLocation,
-          expiryDate,
-          notes,
-          allowPriceEdit,
-          supplierId,
+          alias: data.get('alias') as string || null,
+          barcode: data.get('barcode') as string || null,
+          category: data.get('category') as string || null,
+          unit: data.get('unit') as string || null,
+          costPrice: parseFloat(data.get('costPrice') as string),
+          retailPrice: parseFloat(data.get('retailPrice') as string),
+          wholesalePrice: data.get('wholesalePrice') ? parseFloat(data.get('wholesalePrice') as string) : null,
+          vatType: data.get('vatType') as string || null,
+          stockQuantity: parseInt(data.get('stockQuantity') as string),
+          trackStock: data.get('notTrackStock') !== 'on',
+          reorderPoint: data.get('reorderPoint') ? parseInt(data.get('reorderPoint') as string) : null,
+          shelfLocation: data.get('shelfLocation') as string || null,
+          notes: data.get('notes') as string || null,
+          allowPriceEdit: data.get('allowPriceEdit') === 'on',
+          supplierId: parseInt(supplierIdStr),
         },
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      return fail(500, { message: 'เกิดข้อผิดพลาดในการอัปเดตข้อมูลสินค้า' });
+      if (err.code === 'P2002' && err.meta?.target?.includes('barcode')) {
+        return fail(400, { error: `รหัสบาร์โค้ดนี้มีอยู่แล้วในระบบ` });
+      }
+      return fail(500, { error: 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล' });
     }
 
-    // --- 4. เมื่อสำเร็จ ให้ Redirect กลับไป ---
-    throw redirect(303, '/products');
+    throw redirect(303, `/products`);
   },
 };
