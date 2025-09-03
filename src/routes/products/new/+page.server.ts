@@ -4,59 +4,75 @@ import { db } from '$lib/server/db';
 import { fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 
-// --- LOAD FUNCTION: ดึงข้อมูลที่จำเป็นสำหรับแสดงในฟอร์ม ---
+// --- LOAD FUNCTION: Fetches data needed for the form ---
 export const load: PageServerLoad = async () => {
-  // ดึงข้อมูลผู้ขายทั้งหมด เพื่อเอาไปสร้างเป็นตัวเลือกใน Dropdown
-  const suppliers = await db.supplier.findMany({
-    orderBy: { name: 'asc' },
-  });
-  return { suppliers };
+	// Fetch all three necessary datasets for dropdowns
+	const suppliers = await db.supplier.findMany({ orderBy: { name: 'asc' } });
+	const categories = await db.category.findMany({ orderBy: { name: 'asc' } });
+	const units = await db.unit.findMany({ orderBy: { name: 'asc' } });
+
+	// Return all three to the +page.svelte component
+	return { suppliers, categories, units };
 };
 
-// --- ACTIONS: จัดการการ submit ฟอร์มเพื่อสร้างสินค้าใหม่ ---
+// --- ACTIONS: Handles form submission ---
 export const actions: Actions = {
-  default: async ({ request }) => {
-    const data = await request.formData();
-    const name = data.get('name') as string;
-    const barcode = data.get('barcode') as string | null;
-    const supplierIdStr = data.get('supplierId') as string;
+	default: async ({ request }) => {
+		const data = await request.formData();
 
-    // Validation
-    if (!name || !supplierIdStr) {
-      return fail(400, { error: 'กรุณากรอกข้อมูล * ให้ครบถ้วน' });
-    }
-    const supplierId = parseInt(supplierIdStr);
+		const name = data.get('name') as string;
+		const supplierIdStr = data.get('supplierId') as string;
+		const retailPriceStr = data.get('retailPrice') as string;
+		const saveAndContinue = data.get('saveAndContinue') === 'on'; // Check if the checkbox was ticked
 
-    try {
-      await db.product.create({
-        data: {
-          name, 
-          alias: data.get('alias') as string || null,
-          barcode: barcode || null,
-          category: data.get('category') as string || null,
-          unit: data.get('unit') as string || null,
-          vatType: data.get('vatType') as string || null,
-          notes: data.get('notes') as string || null,
-          shelfLocation: data.get('shelfLocation') as string || null,
-          costPrice: parseFloat(data.get('costPrice') as string || '0'),
-          retailPrice: parseFloat(data.get('retailPrice') as string),
-          wholesalePrice: data.get('wholesalePrice') ? parseFloat(data.get('wholesalePrice') as string) : null,
-          stockQuantity: parseInt(data.get('stockQuantity') as string || '0'),
-          reorderPoint: data.get('reorderPoint') ? parseInt(data.get('reorderPoint') as string) : null,
-          points: data.get('points') ? parseInt(data.get('points') as string) : null,
-          trackStock: data.get('notTrackStock') !== 'on',
-          allowPriceEdit: data.get('allowPriceEdit') === 'on',
-          supplierId: supplierId,
-        },
-      });
-    } catch (err: any) {
-      console.error(err);
-      if (err.code === 'P2002' && err.meta?.target?.includes('barcode')) {
-        return fail(400, { error: `รหัสบาร์โค้ด '${barcode}' นี้มีในระบบแล้ว` });
-      }
-      return fail(500, { error: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล' });
-    }
+		if (!name || !supplierIdStr || !retailPriceStr) {
+			return fail(400, { error: 'กรุณากรอกข้อมูล * ให้ครบถ้วน' });
+		}
 
-    throw redirect(303, '/products');
-  },
+		try {
+			await db.product.create({
+				data: {
+					name,
+					barcode: (data.get('barcode') as string) || null,
+					alias: (data.get('alias') as string) || null,
+					costPrice: parseFloat((data.get('costPrice') as string) || '0'),
+					retailPrice: parseFloat(retailPriceStr),
+					wholesalePrice: data.get('wholesalePrice')
+						? parseFloat(data.get('wholesalePrice') as string)
+						: null,
+					stockQuantity: parseInt((data.get('stockQuantity') as string) || '0'),
+					reorderPoint: data.get('reorderPoint')
+						? parseInt(data.get('reorderPoint') as string)
+						: null,
+					notes: (data.get('notes') as string) || null,
+					shelfLocation: (data.get('shelfLocation') as string) || null,
+					vatType: (data.get('vatType') as string) || 'none',
+					// ✅ MODIFIED: Correctly handle boolean values from checkboxes
+					trackStock: data.get('notTrackStock') !== 'on',
+					allowPriceEdit: data.get('allowPriceEdit') === 'on',
+
+					supplierId: parseInt(supplierIdStr),
+					categoryId: data.get('categoryId')
+						? parseInt(data.get('categoryId') as string)
+						: null,
+					unitId: data.get('unitId') ? parseInt(data.get('unitId') as string) : null
+				}
+			});
+		} catch (err: any) {
+			if (err.code === 'P2002' && err.meta?.target?.includes('barcode')) {
+				return fail(400, { error: `รหัสบาร์โค้ดนี้มีอยู่แล้วในระบบ` });
+			}
+			console.error(err);
+			return fail(500, { error: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล' });
+		}
+
+		// [MODIFIED] Conditional logic based on the checkbox
+		if (saveAndContinue) {
+			// If checked, return a success message to stay on the page
+			return { success: true, message: 'บันทึกสินค้าเรียบร้อยแล้ว เพิ่มรายการต่อไปได้เลย' };
+		}
+
+		// If not checked, redirect to the product list as before
+		throw redirect(303, '/products');
+	}
 };

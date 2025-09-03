@@ -22,6 +22,6 @@ export const actions: Actions = {
 		});
 
 		// 4. Redirect ผู้ใช้กลับไปที่หน้า login
-		throw redirect(302, '/login');
+		throw redirect(303, '/login');
 	}
 };

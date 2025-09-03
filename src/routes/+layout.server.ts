@@ -1,16 +1,13 @@
-// Path: src/routes/+layout.server.ts
+// File: src/routes/+layout.server.ts
 
 import type { LayoutServerLoad } from './$types';
 
-/**
- * ฟังก์ชัน load นี้จะทำงานบนฝั่งเซิร์ฟเวอร์เสมอ
- * สำหรับทุกๆ หน้าที่อยู่ภายใต้ layout นี้
- */
 export const load: LayoutServerLoad = async ({ locals }) => {
-	// ดึงข้อมูล user และ session ที่ถูกแนบมาโดย hooks.server.ts
-	// แล้วส่งต่อไปยังตัวแปร `data` ในหน้า Svelte (+layout.svelte)
-	// ทำให้เราสามารถเข้าถึงข้อมูลผู้ใช้ได้จาก data.user ในทุกหน้า
-	return {
-		user: locals.user
-	};
+    // ฟังก์ชัน load ได้รับ 'locals' ที่ถูกตั้งค่ามาจาก hooks
+
+    // ✨ นี่คือการ "หยิบของออกจากกระเป๋า" แล้ว "แพ็คใส่กล่อง" เพื่อส่งต่อ ✨
+    return {
+        user: locals.user // <-- หยิบ 'user' จาก locals มาใส่ใน key ที่ชื่อ 'user'
+    };
+    // object ที่ถูก return จากตรงนี้ จะถูกส่งไปให้ +layout.svelte
 };

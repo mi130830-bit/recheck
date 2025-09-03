@@ -91,3 +91,61 @@
 		</article>
 	</dialog>
 {/if}
+
+<style>
+:root {
+  /* ตัวแปรสี */
+  --color-primary: #4dd30f;         /* สีปุ่มหลัก */
+  --color-primary-hover: #0bcc2f;   /* สีปุ่มหลักเมื่อ hover */
+  --color-secondary: #ed620c;       /* สีปุ่มรอง */
+  --color-secondary-hover: #e91506; /* สีปุ่มรองเมื่อ hover */
+  --color-outline: #147db7;         /* สีปุ่มขอบ */
+  --color-outline-hover: #105a8b;   /* สีปุ่มขอบเมื่อ hover */
+  --color-text-on-primary: #ffffff; /* สีข้อความบนปุ่ม */
+  --color-text-on-secondary: #ffffff;
+  --color-text-on-outline: #147db7;
+}
+
+/* ปุ่มหลัก (สีพื้น) */
+button.primary,
+button[type="submit"] {
+  background-color: var(--color-primary);
+  color: var(--color-text-on-primary);
+  border: none;
+  transition: background-color 0.3s ease;
+  cursor: pointer;
+}
+
+button.primary:hover,
+button[type="submit"]:hover {
+  background-color: var(--color-primary-hover);
+}
+
+/* ปุ่มรอง (background สีเทาเข้ม) */
+button.secondary {
+  background-color: var(--color-secondary);
+  color: var(--color-text-on-secondary);
+  border: none;
+  transition: background-color 0.3s ease;
+  cursor: pointer;
+}
+
+button.secondary:hover {
+  background-color: var(--color-secondary-hover);
+}
+
+/* ปุ่มขอบ (outline) */
+button.outline {
+  background-color: transparent;
+  border: 2px solid var(--color-outline);
+  color: var(--color-text-on-outline);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+button.outline:hover {
+  background-color: var(--color-outline);
+  color: var(--color-text-on-primary);
+  border-color: var(--color-outline-hover);
+}
+</style>

@@ -1,4 +1,4 @@
-// File: prisma/schema.prisma (Final Recommended Version)
+// File: prisma/schema.prisma (Final Version with suggestions)
 
 generator client {
   provider        = "prisma-client-js"
@@ -20,13 +20,11 @@ enum OrderStatus {
   CANCELLED
 }
 
-// [เพิ่มใหม่] สถานะของใบวางบิล
 enum BillingNoteStatus {
-  PENDING   // รอลูกค้าชำระ
-  PAID      // ชำระแล้ว
-  CANCELLED // ยกเลิก
+  PENDING
+  PAID
+  CANCELLED
 }
-
 
 // ===============================================
 //  Model: PurchaseOrder (ใบสั่งซื้อ/ใบรับของ)
@@ -37,7 +35,7 @@ model PurchaseOrder {
   notes       String?             @db.Text
   totalCost   Decimal
   createdAt   DateTime            @default(now())
-  supplier    Supplier            @relation(fields: [supplierId], references: [id])
+  supplier    Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict, onUpdate: Cascade) // ✅ onUpdate added
   supplierId  Int
   items       PurchaseOrderItem[]
 }
@@ -49,9 +47,9 @@ model PurchaseOrderItem {
   id              Int           @id @default(autoincrement())
   quantity        Int
   costPrice       Decimal
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade) // [ปรับปรุง] เพิ่ม onDelete
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade) // ✅ onUpdate added
   purchaseOrderId Int
-  product         Product       @relation(fields: [productId], references: [id])
+  product         Product       @relation(fields: [productId], references: [id], onUpdate: Cascade) // ✅ onUpdate added
   productId       Int
 }
 
@@ -104,6 +102,28 @@ model Customer {
 }
 
 // ===============================================
+//  Model: Unit (หน่วยนับสินค้า)
+// ===============================================
+model Unit {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+// ===============================================
+//  Model: Category (ประเภทสินค้า)
+// ===============================================
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+// ===============================================
 //  Model: Product (ข้อมูลสินค้า)
 // ===============================================
 model Product {
@@ -111,8 +131,10 @@ model Product {
   name               String
   alias              String?
   barcode            String?               @unique
-  category           String?
-  unit               String?
+  category           Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade) // ✅ onUpdate added
+  categoryId         Int?
+  unit               Unit?                 @relation(fields: [unitId], references: [id], onDelete: SetNull, onUpdate: Cascade) // ✅ onUpdate added
+  unitId             Int?
   costPrice          Decimal
   retailPrice        Decimal
   wholesalePrice     Decimal?
@@ -127,8 +149,7 @@ model Product {
   notes              String?               @db.Text
   imageUrl           String?
   allowPriceEdit     Boolean               @default(false)
-  // [ปรับปรุง] ทำให้ supplier เป็น optional (สามารถเป็น null ได้)
-  supplier           Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  supplier           Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull, onUpdate: Cascade) // ✅ onUpdate added
   supplierId         Int?
   OrderItems         OrderItem[]
   purchaseOrderItems PurchaseOrderItem[]
@@ -149,8 +170,7 @@ model Order {
   change          Decimal?
   status          OrderStatus       @default(COMPLETED)
   createdAt       DateTime          @default(now())
-  // [ปรับปรุง] เพิ่ม onDelete: SetNull เพื่อให้ลบ Customer ได้
-  customer        Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customer        Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull, onUpdate: Cascade) // ✅ onUpdate added
   customerId      Int?
   items           OrderItem[]
   billingNoteItem BillingNoteItem?
@@ -165,9 +185,9 @@ model OrderItem {
   quantity         Int
   price            Decimal
   discount         Decimal @default(0)
-  order            Order   @relation(fields: [orderId], references: [id], onDelete: Cascade) // [ปรับปรุง] เพิ่ม onDelete
+  order            Order   @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade) // ✅ onUpdate added
   orderId          Int
-  product          Product @relation(fields: [productId], references: [id])
+  product          Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade) // ✅ onUpdate added
   productId        Int
   returnedQuantity Int     @default(0)
 }
@@ -181,7 +201,7 @@ model ProductReturn {
   totalRefundAmount Decimal
   reason            String?
   createdAt         DateTime     @default(now())
-  originalOrder     Order        @relation(fields: [originalOrderId], references: [id], onDelete: Cascade)
+  originalOrder     Order        @relation(fields: [originalOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade) // ✅ onUpdate added
   items             ReturnItem[]
   @@map("product_returns")
 }
@@ -195,8 +215,8 @@ model ReturnItem {
   productId       Int
   quantity        Int
   priceAtReturn   Decimal
-  productReturn   ProductReturn @relation(fields: [productReturnId], references: [id], onDelete: Cascade)
-  product         Product       @relation(fields: [productId], references: [id])
+  productReturn   ProductReturn @relation(fields: [productReturnId], references: [id], onDelete: Cascade, onUpdate: Cascade) // ✅ onUpdate added
+  product         Product       @relation(fields: [productId], references: [id], onUpdate: Cascade) // ✅ onUpdate added
   @@map("return_items")
 }
 
@@ -215,7 +235,7 @@ model Session {
   id        String   @id
   expiresAt DateTime
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade) // ✅ onUpdate added
 }
 
 // ===============================================
@@ -225,12 +245,10 @@ model BillingNote {
   id          Int               @id @default(autoincrement())
   bnNumber    String            @unique
   totalAmount Decimal
-  // [เพิ่ม] สถานะและวันที่ชำระ
   status      BillingNoteStatus @default(PENDING)
   paidAt      DateTime?
   createdAt   DateTime          @default(now())
-  // [ปรับปรุง] เพิ่ม onDelete: Cascade เพื่อให้ลบตาม Customer
-  customer    Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer    Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Cascade) // ✅ onUpdate added
   customerId  Int
   items       BillingNoteItem[]
 }
@@ -240,8 +258,23 @@ model BillingNote {
 // ===============================================
 model BillingNoteItem {
   id            Int         @id @default(autoincrement())
-  billingNote   BillingNote @relation(fields: [billingNoteId], references: [id], onDelete: Cascade) // [ปรับปรุง] เพิ่ม onDelete
+  billingNote   BillingNote @relation(fields: [billingNoteId], references: [id], onDelete: Cascade, onUpdate: Cascade) // ✅ onUpdate added
   billingNoteId Int
-  order         Order       @relation(fields: [orderId], references: [id])
+  order         Order       @relation(fields: [orderId], references: [id], onUpdate: Cascade) // ✅ onUpdate added
   orderId       Int         @unique
+}
+
+// ===============================================
+//  ✨ NEW MODEL: Settings (การตั้งค่าระบบ)
+// ===============================================
+model Settings {
+  id            Int      @id @default(1) // ใช้ ID คงที่เป็น 1 เพื่อให้มีแค่แถวเดียว
+  storeName     String   @default("My POS Store")
+  address       String?  @db.Text
+  phone         String?
+  taxId         String?
+  defaultVat    Decimal  @default(7.00)
+  receiptNote   String?  @db.Text
+  receiptLogoUrl String?
+  updatedAt     DateTime @updatedAt
 }

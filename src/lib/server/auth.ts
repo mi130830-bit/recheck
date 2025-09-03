@@ -3,9 +3,9 @@ import { Lucia } from 'lucia';
 import { dev } from '$app/environment';
 import { PrismaAdapter } from '@lucia-auth/adapter-prisma';
 import { PrismaClient } from '@prisma/client';
+import { db } from '$lib/server/db';
 
-const client = new PrismaClient();
-const adapter = new PrismaAdapter(client.session, client.user);
+const adapter = new PrismaAdapter(db.session, db.user);
 
 export const lucia = new Lucia(adapter, {
     sessionCookie: {

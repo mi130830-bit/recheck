@@ -1,141 +1,312 @@
-<!-- Path: src/routes/products/+page.svelte (Final Corrected Version) -->
-
 <script lang="ts">
-  import { enhance } from '$app/forms';
-  import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
-  import type { PageData } from './$types';
-  
-  export let data: PageData;
-  
-  // ดึงค่าต่างๆ ที่ server ส่งมาให้
-  $: ({ products, totalItems, currentPage, totalPages, limit } = data);
-  // [แก้ไข] เพิ่มบรรทัดนี้ที่ขาดหายไป เพื่อดึงข้อมูลจาก form actions
-  $: form = data.form;
+	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
+	import type { PageData } from './$types';
+	export let data: PageData;
+	export let form;
 
-  // State สำหรับการค้นหาแบบ Live
-  let searchQuery = data.query ?? '';
-  let debounceTimer: NodeJS.Timeout;
+	$: ({ products, totalItems, currentPage, totalPages, query, limit } = data);
+	let searchQuery = query ?? '';
+	let debounceTimer: NodeJS.Timeout;
 
-  // ฟังก์ชันสำหรับจัดการ Live Search
-  function handleSearchInput() {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      const params = new URLSearchParams($page.url.searchParams.toString());
-      params.set('query', searchQuery);
-      params.set('page', '1');
-      goto(`?${params.toString()}`, { 
-        keepFocus: true,
-        noScroll: true,
-        replaceState: true
-      });
-    }, 300);
-  }
+	function handleSearchInput() {
+		clearTimeout(debounceTimer);
+		debounceTimer = setTimeout(() => {
+			const params = new URLSearchParams($page.url.searchParams.toString());
+			params.set('query', searchQuery);
+			params.set('page', '1');
+			goto(`?${params.toString()}`, { keepFocus: true, noScroll: true, replaceState: true });
+		}, 300);
+	}
 </script>
 
 <main class="container">
-  <header class="header-container">
-    <h1>จัดการข้อมูลสินค้า ({totalItems} รายการ)</h1>
-    <div class="button-group">
-      <a href="/products/import" role="button" class="secondary outline">นำเข้าจาก Excel</a>
-      <a href="/products/new" role="button">+ เพิ่มสินค้าใหม่</a>
-    </div>
-  </header>
-  
-  <div class="search-form">
-    <input 
-      type="search" 
-      name="query" 
-      placeholder="พิมพ์เพื่อค้นหาจากชื่อ, บาร์โค้ด, ชื่อย่อ..." 
-      bind:value={searchQuery}
-      on:input={handleSearchInput}
-    />
-  </div>
+	<header class="header-container">
+		<h1>รายการสินค้า ({totalItems} รายการ)</h1>
+		<div class="button-group">
+			<a href="/products/import" role="button" class="secondary outline mint-outline"
+				>นำเข้าจาก Excel</a
+			>
+			<a href="/products/new" role="button" class="mint-solid">+ เพิ่มสินค้าใหม่</a>
+		</div>
+	</header>
 
-  <!-- โค้ดส่วนนี้จะทำงานได้แล้ว เพราะตัวแปร form ถูกประกาศแล้ว -->
-  {#if form?.message}
-    <aside class="error-message">
-        <p>{form.message}</p>
-    </aside>
-  {/if}
+	<div class="search-container">
+		<label for="search-input">ค้นหาสินค้า</label>
+		<input
+			id="search-input"
+			type="search"
+			name="query"
+			placeholder="บาร์โค้ด, ชื่อสินค้า..."
+			bind:value={searchQuery}
+			on:input={handleSearchInput}
+		/>
+	</div>
 
-  {#if products.length === 0}
-    <article><p>ไม่พบข้อมูลสินค้าที่ตรงกับเงื่อนไขการค้นหา</p></article>
-  {:else}
-    <div style="overflow-x: auto;">
-      <table>
-        <thead>
-          <tr>
-            <th>ชื่อสินค้า</th>
-            <th>บาร์โค้ด</th>
-            <th style="text-align: right;">ราคาปลีก</th>
-            <th style="text-align: center;">คงคลัง</th>
-            <th>ผู้ขาย</th>
-            <th style="width: 200px;">การกระทำ</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each products as product (product.id)}
-            <tr>
-              <td>{product.name}</td>
-              <td>{product.barcode || '-'}</td>
-              <td style="text-align: right;">{product.retailPrice.toFixed(2)}</td>
-              <td style="text-align: center;">{product.stockQuantity} {product.unit || ''}</td>
-              <td>{product.supplier?.name || '-'}</td>
-              <td>
-                <div class="action-buttons">
-                  <a href="/products/{product.id}/edit" role="button" class="outline">แก้ไข</a>
-                  <form method="POST" action="?/delete" use:enhance>
-                    <input type="hidden" name="id" value={product.id} />
-                    <button type="submit" class="contrast outline" on:click={(event) => {
-                      if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบ "${product.name}"?`)) {
-                        event.preventDefault();
-                      }
-                    }}>ลบ</button>
-                  </form>
-                </div>
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
+	{#if form?.message}
+		<aside class="error-message">
+			<p>{form.message}</p>
+		</aside>
+	{/if}
 
-    {#if totalPages > 1}
-      <nav class="pagination">
-        <ul>
-          <li>
-            <a href="?query={searchQuery}&page={currentPage - 1}" aria-label="Previous" class:disabled={currentPage <= 1}>
-              &laquo; ก่อนหน้า
-            </a>
-          </li>
-          <li>
-            <span>หน้า {currentPage} / {totalPages}</span>
-          </li>
-          <li>
-            <a href="?query={searchQuery}&page={currentPage + 1}" aria-label="Next" class:disabled={currentPage >= totalPages}>
-              ถัดไป &raquo;
-            </a>
-          </li>
-        </ul>
-      </nav>
-    {/if}
-  {/if}
+	{#if products.length === 0}
+		<article><p>ไม่พบข้อมูลสินค้าที่ตรงกับเงื่อนไขการค้นหา</p></article>
+	{:else}
+		<div style="overflow-x: auto;">
+			<table>
+				<thead>
+					<tr>
+						<th style="width: 80px;">ลำดับที่</th>
+						<th>บาร์โค้ด</th>
+						<th>ชื่อสินค้า</th>
+						<th>ประเภทสินค้า</th>
+						<th style="text-align: center;">จำนวน</th>
+						<th style="text-align: right;">ราคา (ปลีก)</th>
+						<th style="text-align: right;">ราคา (ส่ง)</th>
+						<th style="text-align: right;">ต้นทุน</th>
+						<th style="width: 180px;">การกระทำ</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each products as product, i (product.id)}
+						<tr>
+							<td>{(currentPage - 1) * limit + i + 1}</td>
+							<td>{product.barcode || '-'}</td>
+							<td><strong>{product.name}</strong></td>
+							<td>{product.category?.name || '-'}</td>
+							<td style="text-align: center;">{product.stockQuantity}</td>
+							<td style="text-align: right;">{product.retailPrice.toFixed(2)}</td>
+							<td style="text-align: right;">{product.wholesalePrice?.toFixed(2) || '-'}</td>
+							<td style="text-align: right;">{product.costPrice.toFixed(2)}</td>
+							<td>
+								<div class="action-buttons">
+									<a
+										href="/products/{product.id}/edit"
+										role="button"
+										class="outline mint-outline"
+										title="แก้ไข"
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											><path d="M12 20h9" /><path
+												d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
+											/></svg
+										>
+									</a>
+
+									<a
+										href="/products/{product.id}/history"
+										role="button"
+										class="secondary outline"
+										title="ดูประวัติสินค้า"
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle
+												cx="5"
+												cy="12"
+												r="1"
+											/></svg
+										>
+									</a>
+
+									<form method="POST" action="?/delete" use:enhance>
+										<input type="hidden" name="id" value={product.id} />
+										<button
+											type="submit"
+											class="outline danger-outline"
+											title="ลบ"
+											on:click={(e) => {
+												if (!confirm(`ยืนยันการลบ "${product.name}"?`)) e.preventDefault();
+											}}
+										>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												><polyline points="3 6 5 6 21 6" /><path
+													d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+												/><line x1="10" y1="11" x2="10" y2="17" /><line
+													x1="14"
+													y1="11"
+													x2="14"
+													y2="17"
+												/></svg
+											>
+										</button>
+									</form>
+								</div>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+
+		{/if}
 </main>
 
 <style>
-  .container { max-width: 1024px; margin: 2rem auto; }
-  .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-  .button-group { display: flex; gap: 0.5rem; }
-  .search-form { margin-bottom: 2rem; }
-  .action-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-  .action-buttons form { margin: 0; }
-  .action-buttons a, .action-buttons button { width: 100%; padding: 0.25rem 0.5rem; font-size: 0.9em; margin: 0; }
-  .error-message { background-color: var(--pico-form-element-invalid-background-color); color: var(--pico-form-element-invalid-color); border-color: var(--pico-form-element-invalid-border-color); padding: 0.5rem 1rem; margin-bottom: 1rem; border-radius: var(--pico-border-radius); }
-  
-  .pagination { margin-top: 2rem; display: flex; justify-content: center; }
-  .pagination ul { display: flex; list-style: none; padding: 0; margin: 0; align-items: center; gap: 1rem; }
-  .pagination a { display: block; padding: 0.5rem 1rem; text-decoration: none; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); }
-  .pagination a.disabled { pointer-events: none; opacity: 0.5; color: var(--pico-muted-color); }
-  .pagination a:not(.disabled):hover { background-color: var(--pico-muted-background-color); }
+	:root {
+		--mint-green: #15cb24;
+		--mint-green-hover: #26c217;
+		--mint-green-light: #f0fafa;
+		--text-color-on-mint: #ffffff;
+		--danger-red: #c62828;
+		--danger-red-hover: #b71c1c;
+		--danger-red-light: #ffcdd2;
+	}
+
+	.header-container {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1rem;
+		margin-top: 1rem; /* START: เพิ่มระยะห่างขอบบน */
+	}
+
+	.header-container h1 {
+		margin-bottom: 0;
+	}
+	.button-group {
+		display: flex;
+		gap: 0.5rem;
+	}
+	.search-container {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		margin-bottom: 1rem;
+	}
+	.search-container label {
+		margin-bottom: 0;
+		white-space: nowrap;
+	}
+	.search-container input {
+		margin-bottom: 0;
+		max-width: 400px;
+	}
+
+	.action-buttons {
+		display: flex;
+		gap: 0.5rem;
+		align-items: stretch;
+		height: 40px;
+	}
+
+	.action-buttons > * {
+		flex: 1 1 0;
+		min-width: 0;
+		height: 100%;
+		padding: 0;
+		margin-bottom: 0;
+	}
+
+	.action-buttons a[role='button'],
+	.action-buttons button {
+		width: 100%;
+		height: 100%;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		min-width: 0;
+		padding: 0;
+		box-sizing: border-box;
+		border-radius: 20px;  /*ดินสอ ถังขยะกลมหมด*/
+	}
+
+	.action-buttons form {
+		flex: 1 1 0;
+		height: 100%;
+		display: flex;
+	}
+
+	.action-buttons form button {
+		width: 100%;
+		height: 100%;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		padding: 0;
+		min-width: 0;
+	}
+	.mint-solid,
+.mint-outline {
+	border-radius: 20px; /* <-- ปรับค่าตรงนี้เพื่อเปลี่ยนความมน */
+}
+
+	.mint-solid {
+		--pico-background-color: var(--mint-green);
+		--pico-border-color: var(--mint-green);
+		--pico-color: var(--text-color-on-mint);
+	}
+	.mint-solid:hover,
+	.mint-solid:active,
+	.mint-solid:focus {
+		--pico-background-color: var(--mint-green-hover);
+		--pico-border-color: var(--mint-green-hover);
+	}
+	.mint-outline.outline,
+	.mint-outline.secondary.outline {
+		--pico-background-color: transparent;
+		--pico-border-color: var(--mint-green);
+		--pico-color: var(--mint-green);
+	}
+	.mint-outline.outline:hover,
+	.mint-outline.outline:active,
+	.mint-outline.outline:focus,
+	.mint-outline.secondary.outline:hover,
+	.mint-outline.secondary.outline:active,
+	.mint-outline.secondary.outline:focus {
+		--pico-background-color: var(--mint-green-light);
+		--pico-border-color: var(--mint-green-hover);
+		--pico-color: var(--mint-green-hover);
+	}
+	.danger-outline.outline {
+		--pico-background-color: transparent;
+		--pico-border-color: var(--danger-red);
+		--pico-color: var(--danger-red);
+	}
+	.danger-outline.outline:hover,
+	.danger-outline.outline:active,
+	.danger-outline.outline:focus {
+		--pico-background-color: var(--danger-red-light);
+		--pico-border-color: var(--danger-red-hover);
+		--pico-color: var(--danger-red-hover);
+	}
+	.error-message {
+		background-color: var(--pico-form-element-invalid-background-color);
+		border: 1px solid var(--pico-form-element-invalid-border-color);
+		color: var(--pico-form-element-invalid-color);
+		padding: 0.5rem 1rem;
+		margin-bottom: 1rem;
+		border-radius: var(--pico-border-radius);
+	}
+	.error-message p {
+		margin: 0;
+	}
+
 </style>
