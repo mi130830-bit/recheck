@@ -1,26 +1,48 @@
-<!-- Path: src/routes/receipts/[orderId]/+page.svelte (Final Corrected Version) -->
+<!-- Path: src/routes/receipts/[orderId]/+page.svelte (Final with Print Controls) -->
 <script lang="ts">
-	import { page } from '$app/stores';
-	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
 
 	export let data: PageData;
 	const { receiptData } = data;
 	const { order, shopInfo } = receiptData;
 
-	const paperSize = $page.url.searchParams.get('size') || 'slip';
+	// --- START: ส่วนควบคุมการพิมพ์ ---
+	let paperSize: 'slip' | 'a5' | 'a4' = 'slip'; // ค่าเริ่มต้นเป็น 80mm (slip)
 
-	onMount(() => {
+	function printReceipt() {
+		// ใช้ setTimeout เพื่อให้แน่ใจว่า Svelte ได้อัปเดต class ของ paperSize ใน DOM แล้ว
 		setTimeout(() => {
 			window.print();
-		}, 300);
-	});
+		}, 50);
+	}
+	// --- END: ส่วนควบคุมการพิมพ์ ---
 </script>
 
 <svelte:head>
 	<title>ใบเสร็จรับเงิน #{order.orderNumber}</title>
 </svelte:head>
 
+<!-- START: UI ส่วนควบคุมการพิมพ์ (จะถูกซ่อนตอนพิมพ์) -->
+<div class="print-controls">
+	<div class="container">
+		<a href="/customers/{order.customerId}/history" role="button" class="secondary outline">
+			&laquo; กลับไปประวัติ
+		</a>
+		<div class="button-group">
+			<button class:outline={paperSize !== 'slip'} on:click={() => (paperSize = 'slip')}>
+				80มม.
+			</button>
+			<button class:outline={paperSize !== 'a5'} on:click={() => (paperSize = 'a5')}>A5</button>
+			<button class:outline={paperSize !== 'a4'} on:click={() => (paperSize = 'a4')}>A4</button>
+		</div>
+		<button on:click={printReceipt}>
+			🖨️ พิมพ์ใบเสร็จ
+		</button>
+	</div>
+</div>
+<!-- END: UI ส่วนควบคุมการพิมพ์ -->
+
+<!-- ใช้ `paperSize` ที่เป็น state มากำหนด class ที่นี่ -->
 <div class="receipt-container" class:a4={paperSize === 'a4'} class:a5={paperSize === 'a5'} class:slip={paperSize === 'slip'}>
 	<header>
 		<h1>ใบเสร็จรับเงิน / ใบกำกับภาษีอย่างย่อ</h1>
@@ -52,18 +74,15 @@
 						<td>{i + 1}</td>
 						<td class="item-name">{item.product.name}</td>
 						<td class="num">{item.quantity}</td>
-						<!-- [แก้ไข] แปลง String เป็น Number ก่อนใช้ toFixed -->
-						<td class="num">{Number(item.price).toFixed(2)}</td>
-						<!-- [แก้ไข] แปลง String เป็น Number ก่อนนำไปคำนวณ -->
-						<td class="num">{(item.quantity * Number(item.price)).toFixed(2)}</td>
+						<td class="num">{item.price.toFixed(2)}</td>
+						<td class="num">{(item.quantity * item.price).toFixed(2)}</td>
 					</tr>
 				{/each}
 			</tbody>
 			<tfoot>
 				<tr>
 					<td colspan="4" class="total-label">รวมเป็นเงิน</td>
-					<!-- [แก้ไข] แปลง String เป็น Number ก่อนใช้ toFixed -->
-					<td class="num total-value">{Number(order.total).toFixed(2)}</td>
+					<td class="num total-value">{order.total.toFixed(2)}</td>
 				</tr>
 			</tfoot>
 		</table>
@@ -78,6 +97,8 @@
 	/* --- General Styles --- */
 	:global(body) {
 		background-color: #f0f0f0;
+		/* เพิ่ม padding-top เพื่อไม่ให้ control bar ทับเนื้อหา */
+		padding-top: 80px; 
 	}
 	.receipt-container {
 		background-color: white;
@@ -115,24 +136,68 @@
 	}
 	.a5 {
 		width: 148mm;
-		height: 210mm;
 	}
 	.a4 {
 		width: 210mm;
-		height: 297mm;
 	}
+	
+	/* --- START: Styles for Print Controls --- */
+	.print-controls {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100%;
+		background-color: #ffffff;
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+		padding: 1rem 0;
+		z-index: 1000;
+	}
+	.print-controls .container {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		max-width: 1200px;
+		margin: 0 auto;
+		padding: 0 1rem;
+	}
+	.button-group {
+		display: flex;
+	}
+	.button-group button {
+		margin: 0;
+		border-radius: 0;
+	}
+	.button-group button:first-child {
+		border-top-left-radius: var(--pico-border-radius);
+		border-bottom-left-radius: var(--pico-border-radius);
+	}
+	.button-group button:last-child {
+		border-top-right-radius: var(--pico-border-radius);
+		border-bottom-right-radius: var(--pico-border-radius);
+	}
+	/* --- END: Styles for Print Controls --- */
+
 
 	/* --- Print-Specific Styles --- */
 	@media print {
 		:global(body) {
 			background-color: white;
+			padding-top: 0; /* เอา padding ออกเมื่อพิมพ์ */
 		}
+		
+		/* ซ่อนแถบควบคุมทั้งหมดเมื่อสั่งพิมพ์ */
+		.print-controls {
+			display: none;
+		}
+
 		.receipt-container {
 			margin: 0;
 			padding: 0;
 			box-shadow: none;
+			border: none;
 		}
-		.a4, .a5 {
+		.a4, .a5, .slip {
+			width: 100%; /* ให้เต็มความกว้างของกระดาษที่เลือกใน dialog พิมพ์ */
 			position: absolute;
 			top: 0;
 			left: 0;

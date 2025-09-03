@@ -1,4 +1,4 @@
-// File: prisma/schema.prisma (Final Version with suggestions)
+// File: prisma/schema.prisma (ฉบับปรับปรุงแก้ไข)
 
 generator client {
   provider        = "prisma-client-js"
@@ -11,7 +11,7 @@ datasource db {
 }
 
 // ===============================================
-//  Enums (กลุ่มของค่าคงที่)
+//  Enums
 // ===============================================
 enum OrderStatus {
   COMPLETED
@@ -26,18 +26,28 @@ enum BillingNoteStatus {
   CANCELLED
 }
 
+// ✨ เพิ่มใหม่: Enum สำหรับประเภทการเคลื่อนไหวของสต็อก
+enum StockMovementType {
+  PURCHASE_IN   // รับเข้าจากการซื้อ
+  SALE_OUT      // ขายออก
+  RETURN_IN     // รับคืนจากลูกค้า
+  ADJUST_ADD    // ปรับสต็อกเพิ่ม
+  ADJUST_SUB    // ปรับสต็อกลด
+}
+
+
 // ===============================================
 //  Model: PurchaseOrder (ใบสั่งซื้อ/ใบรับของ)
 // ===============================================
 model PurchaseOrder {
-  id          Int                 @id @default(autoincrement())
-  poNumber    String              @unique
-  notes       String?             @db.Text
-  totalCost   Decimal
-  createdAt   DateTime            @default(now())
-  supplier    Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict, onUpdate: Cascade) // ✅ onUpdate added
-  supplierId  Int
-  items       PurchaseOrderItem[]
+  id        Int                 @id @default(autoincrement())
+  poNumber  String              @unique
+  notes     String?             @db.Text
+  totalCost Decimal
+  createdAt DateTime            @default(now())
+  supplier  Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  supplierId Int
+  items     PurchaseOrderItem[]
 }
 
 // ===============================================
@@ -47,9 +57,10 @@ model PurchaseOrderItem {
   id              Int           @id @default(autoincrement())
   quantity        Int
   costPrice       Decimal
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade) // ✅ onUpdate added
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   purchaseOrderId Int
-  product         Product       @relation(fields: [productId], references: [id], onUpdate: Cascade) // ✅ onUpdate added
+  // ✅ ปรับปรุง: เพิ่ม onDelete: Restrict เพื่อป้องกันการลบสินค้าที่มีประวัติการซื้อ
+  product         Product       @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   productId       Int
 }
 
@@ -86,7 +97,7 @@ model Customer {
   lastName             String?
   nationalId           String?       @unique
   phone                String?
-  email                String?
+  email                String?       // ✅ ปรับปรุง: ทำให้ email ไม่ซ้ำกันด้านล่าง
   dateOfBirth          DateTime?
   taxId                String?
   creditLimit          Decimal?
@@ -99,6 +110,10 @@ model Customer {
   billingNotes         BillingNote[]
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
+
+  // ✅ ปรับปรุง: เพิ่ม Index ที่ phone และทำให้ email ไม่ซ้ำกัน (ถ้ามี)
+  @@unique([email])
+  @@index([phone])
 }
 
 // ===============================================
@@ -131,9 +146,9 @@ model Product {
   name               String
   alias              String?
   barcode            String?               @unique
-  category           Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade) // ✅ onUpdate added
+  category           Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   categoryId         Int?
-  unit               Unit?                 @relation(fields: [unitId], references: [id], onDelete: SetNull, onUpdate: Cascade) // ✅ onUpdate added
+  unit               Unit?                 @relation(fields: [unitId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   unitId             Int?
   costPrice          Decimal
   retailPrice        Decimal
@@ -149,14 +164,38 @@ model Product {
   notes              String?               @db.Text
   imageUrl           String?
   allowPriceEdit     Boolean               @default(false)
-  supplier           Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull, onUpdate: Cascade) // ✅ onUpdate added
+  supplier           Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   supplierId         Int?
   OrderItems         OrderItem[]
   purchaseOrderItems PurchaseOrderItem[]
   returns            ReturnItem[]
+  stockLedger        StockLedger[] // ✨ เพิ่มใหม่: ความสัมพันธ์ไปยัง StockLedger
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
   @@fulltext([name, alias, barcode])
+}
+
+// ===============================================
+// ✨ เพิ่มใหม่: Model: StockLedger (ประวัติการเคลื่อนไหวของสินค้า)
+// ===============================================
+model StockLedger {
+  id               Int               @id @default(autoincrement())
+  type             StockMovementType // ประเภท: ซื้อเข้า, ขายออก, รับคืน, ปรับสต็อก
+  quantityChange   Int               // จำนวนที่เปลี่ยนแปลง (เช่น +10 สำหรับรับเข้า, -2 สำหรับขาย)
+  newStockQuantity Int               // จำนวนสต็อกคงเหลือหลังการเปลี่ยนแปลง
+  costAtTime       Decimal?          // ต้นทุน ณ เวลาที่เปลี่ยนแปลง (สำหรับบันทึกต้นทุนขาย)
+  priceAtTime      Decimal?          // ราคา ณ เวลาที่เปลี่ยนแปลง (สำหรับบันทึกราคาขาย)
+  notes            String?           @db.Text
+  createdAt        DateTime          @default(now())
+  product          Product           @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  productId        Int
+
+  // อ้างอิงไปยังเอกสารต้นทาง (ถ้ามี)
+  orderId          Int?
+  purchaseOrderId  Int?
+  returnId         Int?
+
+  @@index([productId, createdAt]) // เพิ่ม index เพื่อการดึงข้อมูลประวัติที่รวดเร็ว
 }
 
 // ===============================================
@@ -170,7 +209,7 @@ model Order {
   change          Decimal?
   status          OrderStatus       @default(COMPLETED)
   createdAt       DateTime          @default(now())
-  customer        Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull, onUpdate: Cascade) // ✅ onUpdate added
+  customer        Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   customerId      Int?
   items           OrderItem[]
   billingNoteItem BillingNoteItem?
@@ -185,9 +224,9 @@ model OrderItem {
   quantity         Int
   price            Decimal
   discount         Decimal @default(0)
-  order            Order   @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade) // ✅ onUpdate added
+  order            Order   @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   orderId          Int
-  product          Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade) // ✅ onUpdate added
+  product          Product @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   productId        Int
   returnedQuantity Int     @default(0)
 }
@@ -201,7 +240,7 @@ model ProductReturn {
   totalRefundAmount Decimal
   reason            String?
   createdAt         DateTime     @default(now())
-  originalOrder     Order        @relation(fields: [originalOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade) // ✅ onUpdate added
+  originalOrder     Order        @relation(fields: [originalOrderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   items             ReturnItem[]
   @@map("product_returns")
 }
@@ -215,13 +254,13 @@ model ReturnItem {
   productId       Int
   quantity        Int
   priceAtReturn   Decimal
-  productReturn   ProductReturn @relation(fields: [productReturnId], references: [id], onDelete: Cascade, onUpdate: Cascade) // ✅ onUpdate added
-  product         Product       @relation(fields: [productId], references: [id], onUpdate: Cascade) // ✅ onUpdate added
+  productReturn   ProductReturn @relation(fields: [productReturnId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  product         Product       @relation(fields: [productId], references: [id], onUpdate: Cascade)
   @@map("return_items")
 }
 
 // ===============================================
-//  Models สำหรับ Authentication (Lucia Auth)
+//  Models สำหรับ Authentication
 // ===============================================
 model User {
   id       String    @id
@@ -235,7 +274,7 @@ model Session {
   id        String   @id
   expiresAt DateTime
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade) // ✅ onUpdate added
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
 // ===============================================
@@ -248,7 +287,7 @@ model BillingNote {
   status      BillingNoteStatus @default(PENDING)
   paidAt      DateTime?
   createdAt   DateTime          @default(now())
-  customer    Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Cascade) // ✅ onUpdate added
+  customer    Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   customerId  Int
   items       BillingNoteItem[]
 }
@@ -258,23 +297,23 @@ model BillingNote {
 // ===============================================
 model BillingNoteItem {
   id            Int         @id @default(autoincrement())
-  billingNote   BillingNote @relation(fields: [billingNoteId], references: [id], onDelete: Cascade, onUpdate: Cascade) // ✅ onUpdate added
+  billingNote   BillingNote @relation(fields: [billingNoteId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   billingNoteId Int
-  order         Order       @relation(fields: [orderId], references: [id], onUpdate: Cascade) // ✅ onUpdate added
+  order         Order       @relation(fields: [orderId], references: [id], onUpdate: Cascade)
   orderId       Int         @unique
 }
 
 // ===============================================
-//  ✨ NEW MODEL: Settings (การตั้งค่าระบบ)
+//  Model: Settings (การตั้งค่าระบบ)
 // ===============================================
 model Settings {
-  id            Int      @id @default(1) // ใช้ ID คงที่เป็น 1 เพื่อให้มีแค่แถวเดียว
-  storeName     String   @default("My POS Store")
-  address       String?  @db.Text
-  phone         String?
-  taxId         String?
-  defaultVat    Decimal  @default(7.00)
-  receiptNote   String?  @db.Text
+  id             Int      @id @default(1)
+  storeName      String   @default("My POS Store")
+  address        String?  @db.Text
+  phone          String?
+  taxId          String?
+  defaultVat     Decimal  @default(7.00)
+  receiptNote    String?  @db.Text
   receiptLogoUrl String?
-  updatedAt     DateTime @updatedAt
+  updatedAt      DateTime @updatedAt
 }

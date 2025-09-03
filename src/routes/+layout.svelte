@@ -53,6 +53,7 @@
 						<li><a href="/reports/low-stock">รายงานสต็อกใกล้หมด</a></li>
 					</ul>
 				</li>
+				 <li><a href="/settings">⚙️ ตั้งค่า</a></li>
 			</ul>
 
 			<div class="nav-actions">
@@ -259,4 +260,10 @@
 	background-color: #dc3545; /* พื้นหลังเปลี่ยนเป็นสีแดง */
 	color: white; /* ตัวหนังสือเปลี่ยนเป็นสีขาว */
 }
+	/* --- Print-Specific Styles --- */
+	@media print {
+		.main-header {
+			display: none;
+		}
+	}
 </style>

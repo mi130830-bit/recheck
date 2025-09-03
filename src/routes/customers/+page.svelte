@@ -1,3 +1,4 @@
+<!-- Path: src/routes/customers/+page.svelte (เพิ่มปุ่มประวัติ) -->
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
@@ -77,8 +78,10 @@
 						<th>ชื่อ - นามสกุล</th>
 						<th>โทรศัพท์</th>
 						<th>อีเมล</th>
+						<!-- START: แก้ไขความกว้างคอลัมน์ -->
 						<th style="width: 180px;">การกระทำ</th>
-						</tr>
+						<!-- END: แก้ไขความกว้างคอลัมน์ -->
+					</tr>
 				</thead>
 				<tbody>
 					{#each customers as customer (customer.id)}
@@ -111,6 +114,7 @@
 										</svg>
 									</a>
 
+									<!-- START: เพิ่มปุ่ม "..." สำหรับดูประวัติ -->
 									<a
 										href="/customers/{customer.id}/history"
 										role="button"
@@ -136,6 +140,8 @@
 											/>
 										</svg>
 									</a>
+									<!-- END: เพิ่มปุ่ม "..." สำหรับดูประวัติ -->
+
 									<form method="POST" action="?/delete" use:enhance>
 										<input type="hidden" name="id" value={customer.id} />
 										<button

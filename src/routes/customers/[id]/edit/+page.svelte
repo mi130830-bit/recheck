@@ -5,69 +5,70 @@
 </script>
 
 <main class="container">
-	<header class="page-header">
-		<h1>แก้ไขข้อมูลสมาชิก</h1>
-		<p class="sub-header">คุณกำลังแก้ไข: {data.customer.firstName}</p>
-	</header>
+	<article>
+		<header class="page-header">
+			<h1>แก้ไขข้อมูลสมาชิก</h1>
+			<p class="sub-header">คุณกำลังแก้ไข: {data.customer.firstName}</p>
+		</header>
 
-	{#if form?.error}
-		<div class="form-error">{form.error}</div>
-	{/if}
+		{#if form?.error}
+			<div class="form-error">{form.error}</div>
+		{/if}
 
-	<form method="POST" use:enhance>
-		<div class="form-grid">
+		<form method="POST" use:enhance>
+			<div class="form-grid">
+				<label>
+					รหัสสมาชิก *
+					<input name="memberCode" value={data.customer.memberCode} required />
+				</label>
+				<label>
+					คำนำหน้า
+					<input name="title" value={data.customer.title || ''} />
+				</label>
+			</div>
+
+			<div class="form-grid">
+				<label>
+					ชื่อ *
+					<input name="firstName" value={data.customer.firstName} required />
+				</label>
+				<label>
+					นามสกุล
+					<input name="lastName" value={data.customer.lastName || ''} />
+				</label>
+			</div>
+
+			<div class="form-grid">
+				<label>
+					โทรศัพท์
+					<input name="phone" value={data.customer.phone || ''} />
+				</label>
+				<label>
+					อีเมล
+					<input name="email" value={data.customer.email || ''} />
+				</label>
+			</div>
+
 			<label>
-				รหัสสมาชิก *
-				<input name="memberCode" value={data.customer.memberCode} required />
+				ที่อยู่
+				<textarea name="address" rows="3">{data.customer.address || ''}</textarea>
 			</label>
-			<label>
-				คำนำหน้า
-				<input name="title" value={data.customer.title || ''} />
-			</label>
-		</div>
 
-		<div class="form-grid">
 			<label>
-				ชื่อ *
-				<input name="firstName" value={data.customer.firstName} required />
+				ที่อยู่สำหรับจัดส่ง
+				<textarea name="shippingAddress" rows="3">{data.customer.shippingAddress || ''}</textarea>
 			</label>
-			<label>
-				นามสกุล
-				<input name="lastName" value={data.customer.lastName || ''} />
-			</label>
-		</div>
 
-		<div class="form-grid">
-			<label>
-				โทรศัพท์
-				<input name="phone" value={data.customer.phone || ''} />
-			</label>
-			<label>
-				อีเมล
-				<input name="email" value={data.customer.email || ''} />
-			</label>
-		</div>
-
-		<label>
-			ที่อยู่
-			<textarea name="address" rows="3">{data.customer.address || ''}</textarea>
-		</label>
-
-		<label>
-			ที่อยู่สำหรับจัดส่ง
-			<textarea name="shippingAddress" rows="3">{data.customer.shippingAddress || ''}</textarea>
-		</label>
-
-		<footer class="form-actions">
-        <a href="/customers" role="button">ยกเลิก</a>
-        <button type="submit">บันทึก</button>
-      </footer>
+			<footer class="form-actions">
+				<a href="/customers" role="button">ยกเลิก</a>
+				<button type="submit">บันทึก</button>
+			</footer>
 		</form>
 	</article>
-</main>
+	</main>
 
 <style>
-	/* === General Layout & Typography === */
+	/* === Layout ทั่วไป === */
 	.container {
 		max-width: 800px;
 		margin: 2rem auto;
@@ -89,7 +90,7 @@
 		margin: 0;
 	}
 
-	/* === Form Specific Styles === */
+	/* === สไตล์ของฟอร์ม === */
 	.form-error {
 		color: #e53935;
 		background: #fde9ea;
@@ -98,32 +99,28 @@
 		margin-bottom: 1.5rem;
 		border-left: 4px solid #e53935;
 	}
-
 	.form-grid {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 1.5rem;
 	}
-
 	form > label,
 	form > .form-grid {
 		margin-bottom: 1.25rem;
 	}
-
 	label {
 		display: flex;
 		flex-direction: column;
 		font-weight: 500;
 		gap: 0.5rem;
 	}
-
 	input:focus,
 	textarea:focus {
 		--pico-form-element-focus-border-color: #15cb24;
 		border-color: var(--pico-form-element-focus-border-color);
 	}
 
-	/* START: แก้ไขส่วน CSS ของปุ่ม */
+	/* === ส่วนท้ายฟอร์มและปุ่ม (Form Actions) === */
 	.form-actions {
 		display: flex;
 		justify-content: flex-end;
@@ -132,32 +129,11 @@
 		padding-top: 1.5rem;
 		border-top: 1px solid var(--pico-muted-border-color);
 	}
-
-	/* 
-/* ================================================================ */
-/* === ส่วนท้ายฟอร์มและปุ่ม (Form Actions) === */
-/* ================================================================ */
-
-	.form-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.75rem;
-		margin-top: 2rem;
-		padding-top: 1.5rem;
-		border-top: 1px solid var(--pico-muted-border-color);
-	}
-
-	/* 
-    1. สไตล์ร่วมสำหรับ "ปุ่มทุกอัน" ใน footer
-       *** นี่คือจุดหลักที่คุณต้องปรับขนาด ความกว้าง และความสูง ***
-  */
+	
 	.form-actions a[role='button'],
 	.form-actions button {
-		/* --- ปรับขนาดตรงนี้ --- */
-		padding: 0.75rem 1.5rem; /* ค่าตัวอย่าง: บน-ล่าง 0.75rem, ซ้าย-ขวา 1.5rem */
-		width: 150px; /* ความกว้างขั้นต่ำของปุ่ม */
-		/* ---------------------- */
-
+		padding: 0.75rem 1.5rem;
+		width: 150px;
 		font-size: 1rem;
 		font-weight: var(--pico-font-weight-bold, bold);
 		border-radius: var(--pico-border-radius);
@@ -167,20 +143,18 @@
 		cursor: pointer;
 		transition: all 0.2s ease-in-out;
 	}
-
-	/* 2. สไตล์สำหรับปุ่ม "ยกเลิก" (ปุ่มตัวแรก) */
+	
 	.form-actions a:first-child {
 		background-color: transparent;
 		border: 1px solid var(--pico-secondary-border, #8692a1);
 		color: var(--pico-secondary, #5c6570);
 	}
 	.form-actions a:first-child:hover {
-		background-color: var(--pico-secondary, #016ef4);
-		border-color: var(--pico-secondary, #5c6570);
-		color: var(--pico-primary-inverse, #fff);
+		background-color: var(--pico-secondary-hover, #d9dde2);
+		border-color: var(--pico-secondary-hover, #8692a1);
+		color: var(--pico-secondary-inverse, #29313d);
 	}
-
-	/* 3. สไตล์สำหรับปุ่ม "บันทึก" (ปุ่มตัวสุดท้าย) */
+	
 	.form-actions button:last-child {
 		background-color: #15cb24;
 		border: 1px solid #15cb24;
