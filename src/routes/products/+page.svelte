@@ -1,3 +1,4 @@
+<!-- src/routes/products/+page.svelte (ปรับปรุงใหม่ - ไม่มีรูปภาพ) -->
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
@@ -57,28 +58,24 @@
 			<table>
 				<thead>
 					<tr>
-						<th style="width: 80px;">ลำดับที่</th>
-						<th>บาร์โค้ด</th>
+						<!-- ✅ REMOVE: ลบ Header 'รูปภาพ' ออก -->
+						<th style="width: 5%;">ลำดับที่</th>
+						<th style="width: 20%;">บาร์โค้ด</th>
 						<th>ชื่อสินค้า</th>
-						<th>ประเภทสินค้า</th>
-						<th style="text-align: center;">จำนวน</th>
-						<th style="text-align: right;">ราคา (ปลีก)</th>
-						<th style="text-align: right;">ราคา (ส่ง)</th>
-						<th style="text-align: right;">ต้นทุน</th>
+						<th style="text-align: center; width: 15%;">จำนวนคงเหลือ</th>
+						<th style="text-align: right; width: 15%;">ราคาปลีก (บาท)</th>
 						<th style="width: 180px;">การกระทำ</th>
 					</tr>
 				</thead>
 				<tbody>
 					{#each products as product, i (product.id)}
 						<tr>
+							<!-- ✅ REMOVE: ลบข้อมูลแถว 'รูปภาพ' ออก -->
 							<td>{(currentPage - 1) * limit + i + 1}</td>
 							<td>{product.barcode || '-'}</td>
 							<td><strong>{product.name}</strong></td>
-							<td>{product.category?.name || '-'}</td>
 							<td style="text-align: center;">{product.stockQuantity}</td>
 							<td style="text-align: right;">{product.retailPrice.toFixed(2)}</td>
-							<td style="text-align: right;">{product.wholesalePrice?.toFixed(2) || '-'}</td>
-							<td style="text-align: right;">{product.costPrice.toFixed(2)}</td>
 							<td>
 								<div class="action-buttons">
 									<a
@@ -104,10 +101,10 @@
 									</a>
 
 									<a
-										href="/products/{product.id}/history"
+										href="/products/{product.id}"
 										role="button"
 										class="secondary outline"
-										title="ดูประวัติสินค้า"
+										title="ดูรายละเอียดสินค้า"
 									>
 										<svg
 											xmlns="http://www.w3.org/2000/svg"
@@ -165,11 +162,12 @@
 				</tbody>
 			</table>
 		</div>
-
-		{/if}
+	{/if}
 </main>
 
 <style>
+	/* ✅ REMOVE: ลบ Style ของ .product-thumbnail ออก */
+
 	:root {
 		--mint-green: #15cb24;
 		--mint-green-hover: #26c217;
@@ -185,7 +183,7 @@
 		justify-content: space-between;
 		align-items: center;
 		margin-bottom: 1rem;
-		margin-top: 1rem; /* START: เพิ่มระยะห่างขอบบน */
+		margin-top: 1rem;
 	}
 
 	.header-container h1 {
@@ -235,7 +233,7 @@
 		min-width: 0;
 		padding: 0;
 		box-sizing: border-box;
-		border-radius: 20px;  /*ดินสอ ถังขยะกลมหมด*/
+		border-radius: 20px;
 	}
 
 	.action-buttons form {
@@ -254,9 +252,9 @@
 		min-width: 0;
 	}
 	.mint-solid,
-.mint-outline {
-	border-radius: 20px; /* <-- ปรับค่าตรงนี้เพื่อเปลี่ยนความมน */
-}
+	.mint-outline {
+		border-radius: 20px;
+	}
 
 	.mint-solid {
 		--pico-background-color: var(--mint-green);
@@ -308,5 +306,4 @@
 	.error-message p {
 		margin: 0;
 	}
-
 </style>

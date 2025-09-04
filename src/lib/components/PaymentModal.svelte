@@ -134,8 +134,8 @@
 	:root {
 		/* Green Tones (Primary Action) */
 		--theme-green-dark: #28e132;
-		--theme-green-darker: #66bb6a;
-		--theme-green-text: #24df2d;
+		--theme-green-darker: #22c52a; /* Darker shade for hover */
+		--theme-green-text: #1a8c1f; /* Darker shade for text */
 
 		/* Blue Tones (Credit Sale Action) */
 		--theme-blue-main: #36a3fc;
@@ -196,7 +196,7 @@
 
 	/* === Button Styles === */
 
-	/* Default Button (Pastel Green) */
+	/* Default Button (Vibrant Green) */
 	button {
 		background-color: var(--theme-green-dark);
 		color: white;

@@ -34,11 +34,20 @@
 {/if}
 
 <style>
-	/* (Optional) คุณสามารถย้าย Style ที่เกี่ยวข้องกับ Modal มาไว้ที่นี่ได้ */
 	article {
 		min-width: 450px;
 	}
 	hr {
 		margin: 1rem 0;
+	}
+    /* Style for the main action button */
+	footer button {
+		background-color: #28e132;
+		border-color: #28e132;
+		color: white;
+	}
+	footer button:hover {
+		background-color: #22c52a;
+		border-color: #22c52a;
 	}
 </style>

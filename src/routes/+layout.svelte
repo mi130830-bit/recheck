@@ -53,7 +53,15 @@
 						<li><a href="/reports/low-stock">รายงานสต็อกใกล้หมด</a></li>
 					</ul>
 				</li>
-				 <li><a href="/settings">⚙️ ตั้งค่า</a></li>
+				
+				<!-- ✅ FIX: แก้ไขส่วนของ Dropdown "ตั้งค่า" -->
+				<li class="dropdown">
+					<a href="/settings">⚙️ ตั้งค่า &#9662;</a>
+					<ul class="dropdown-menu">
+						<li><a href="/settings">ตั้งค่าทั่วไป</a></li>
+						<li><a href="/settings/maintenance">บำรุงรักษาระบบ</a></li>
+					</ul>
+				</li>
 			</ul>
 
 			<div class="nav-actions">

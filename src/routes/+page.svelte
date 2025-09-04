@@ -3,6 +3,7 @@
 	import type { Product, Customer, Order, OrderItem } from '@prisma/client';
 	import PaymentModal from '$lib/components/PaymentModal.svelte';
 	import HeldBillsModal from '$lib/components/HeldBillsModal.svelte';
+	import SaleSuccessModal from '$lib/components/SaleSuccessModal.svelte';
 
 	type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { product: Product })[] };
 
@@ -179,7 +180,7 @@
 				cart: cart.map((item) => ({
 					id: item.id,
 					quantity: Number(item.quantity),
-					retailPrice: Number(item.retailPrice), // ส่งราคาที่อาจถูกแก้ไขไป
+					retailPrice: Number(item.retailPrice),
 					discount: Number(item.discount || 0)
 				})),
 				customerId: selectedCustomer ? selectedCustomer.id : null,
@@ -305,7 +306,8 @@
 					<div class="customer-display">
 						<div class="customer-info-text">
 							<span
-								><strong>ชื่อ:</strong> {selectedCustomer.firstName} {selectedCustomer.lastName || ''} ({selectedCustomer.phone || selectedCustomer.memberCode})</span
+								><strong>ชื่อ:</strong> {selectedCustomer.firstName} {selectedCustomer.lastName ||
+									''} ({selectedCustomer.phone || selectedCustomer.memberCode})</span
 							>
 							{#if selectedCustomer.shippingAddress}
 								<div class="customer-address">
@@ -327,7 +329,8 @@
 							<div class="search-dropdown">
 								{#each customerSearchResults as customer (customer.id)}
 									<button class="customer-item" on:click="{() => selectCustomer(customer)}">
-										{customer.firstName} {customer.lastName || ''} - {customer.phone || customer.memberCode}
+										{customer.firstName} {customer.lastName ||
+											''} - {customer.phone || customer.memberCode}
 									</button>
 								{/each}
 							</div>
@@ -366,28 +369,25 @@
 				<table>
 					<thead>
 						<tr>
-							<th>ที่</th>
-							<th>บาร์โค้ด</th>
-							<th>ชื่อสินค้า</th>
-							<th>จำนวน</th>
-							<th>ราคา</th>
-							<th>ส่วนลด/หน่วย</th>
-							<th>รวม</th>
-							<th>ลบ</th>
+							<th style="width: 5%;">ที่</th>
+							<th style="width: 50%;">ชื่อสินค้า</th>
+							<th style="width: 10%;">จำนวน</th>
+							<th style="width: 12%;">ราคา</th>
+							<th style="width: 11%;">ส่วนลด</th>
+							<th style="width: 12%;">รวม</th>
+							<th style="width: 5%;">ลบ</th>
 						</tr>
 					</thead>
 					<tbody>
 						{#if cart.length === 0}
-							<tr><td colspan="8" class="empty-row">-- เพิ่มสินค้าเพื่อเริ่มการขาย --</td></tr>
+							<tr><td colspan="7" class="empty-row">-- เพิ่มสินค้าเพื่อเริ่มการขาย --</td></tr>
 						{:else}
 							{#each cart as item, i (item.id)}
 								<tr>
-									<td>{i + 1}</td>
-									<td>{item.barcode || '-'}</td>
+									<td class="td-center">{i + 1}</td>
 									<td>{item.name}</td>
-									<td>
+									<td class="td-center">
 										<div class="quantity-control">
-											<button on:click="{() => adjustQuantity(item.id, -1)}" class="outline secondary small-btn">-</button>
 											<input
 												type="number"
 												class="quantity-input"
@@ -395,15 +395,18 @@
 												min="1"
 												on:input="{(e) => updateQuantity(i, e.currentTarget.value)}"
 											/>
-											<button on:click="{() => adjustQuantity(item.id, 1)}" class="outline secondary small-btn">+</button>
+											<div class="spinner-buttons">
+												<button on:click="{() => adjustQuantity(item.id, 1)}" class="outline secondary small-btn spinner-up">▲</button>
+												<button on:click="{() => adjustQuantity(item.id, -1)}" class="outline secondary small-btn spinner-down">▼</button>
+											</div>
 										</div>
 									</td>
-									<td>
+									<td class="td-center">
 										<input type="number" step="0.01" bind:value={item.retailPrice} class="price-input" />
 									</td>
-									<td><input type="number" bind:value="{item.discount}" min="0" class="discount-input" /></td>
-									<td>{((Number(item.retailPrice) - Number(item.discount || 0)) * item.quantity).toFixed(2)}</td>
-									<td>
+									<td class="td-center"><input type="number" bind:value="{item.discount}" min="0" class="discount-input" /></td>
+									<td class="td-right">{((Number(item.retailPrice) - Number(item.discount || 0)) * item.quantity).toFixed(2)}</td>
+									<td class="td-center">
 										<button on:click="{() => removeFromCart(item.id)}" class="contrast outline small-btn">X</button>
 									</td>
 								</tr>
@@ -439,7 +442,7 @@
 
 			<footer class="summary-footer">
 				<button
-					class="checkout-btn mint-solid"
+					class="checkout-btn main-action-btn"
 					disabled="{cart.length === 0}"
 					on:click="{() => (showPaymentModal = true)}">คิดเงิน</button
 				>
@@ -464,243 +467,288 @@
 	on:close="{() => (showHeldBillsModal = false)}"
 />
 
-{#if showSaleSuccessModal}
-	<dialog open>
-		<article>
-			<header>
-				<a href="#close" aria-label="Close" class="close" on:click|preventDefault="{closeSuccessModalAndReset}"></a>
-				<strong>✅ บันทึกการขายสำเร็จ!</strong>
-			</header>
-			<p>คุณต้องการพิมพ์ใบเสร็จหรือไม่?</p>
-			<footer>
-				<div class="grid">
-					<a href="/receipts/{newOrderId}?size=a4" target="_blank" role="button" class="secondary">พิมพ์ (A4)</a>
-					<a href="/receipts/{newOrderId}?size=a5" target="_blank" role="button" class="secondary">พิมพ์ (A5)</a>
-					<a href="/receipts/{newOrderId}?size=slip" target="_blank" role="button" class="secondary outline">พิมพ์ (สลิป)</a>
-				</div>
-				<hr />
-				<button on:click="{closeSuccessModalAndReset}">เริ่มการขายใหม่</button>
-			</footer>
-		</article>
-	</dialog>
-{/if}
+<SaleSuccessModal 
+    bind:showModal={showSaleSuccessModal}
+    newOrderId={newOrderId}
+    on:closeAndReset={closeSuccessModalAndReset}
+/>
 
 <style>
-	:root {
-		--mint-green: #15cb24;
-		--mint-green-hover: #26c217;
-		--text-color-on-mint: #ffffff;
-		--danger-red: #f47812;
-		--danger-red-hover: #e53306;
-	}
+:root {
+	--main-green: #28e132;
+	--main-green-hover: #22c52a;
+	--text-color-on-main: #ffffff;
+	--danger-red: #f44336;
+	--danger-red-hover: #d32f2f;
+}
 
-	/* --- Mint Green Button Styles --- */
-	.mint-solid {
-		--pico-background-color: var(--mint-green);
-		--pico-border-color: var(--mint-green);
-		--pico-color: var(--text-color-on-mint);
-	}
-	.mint-solid:hover,
-	.mint-solid:active,
-	.mint-solid:focus {
-		--pico-background-color: var(--mint-green-hover);
-		--pico-border-color: var(--mint-green-hover);
-	}
+/* --- Main Action Button Styles --- */
+.main-action-btn {
+	--pico-background-color: var(--main-green);
+	--pico-border-color: var(--main-green);
+	--pico-color: var(--text-color-on-main);
+}
+.main-action-btn:hover,
+.main-action-btn:active,
+.main-action-btn:focus {
+	--pico-background-color: var(--main-green-hover);
+	--pico-border-color: var(--main-green-hover);
+}
+/* --- Danger Red Button Styles --- */
+.danger-solid {
+	--pico-background-color: var(--danger-red);
+	--pico-border-color: var(--danger-red);
+	--pico-color: var(--text-color-on-main);
+}
+.danger-solid:hover,
+.danger-solid:active,
+.danger-solid:focus {
+	--pico-background-color: var(--danger-red-hover);
+	--pico-border-color: var(--danger-red-hover);
+}
 
-	/* --- Danger Red Button Styles --- */
-	.danger-solid {
-		--pico-background-color: var(--danger-red);
-		--pico-border-color: var(--danger-red);
-		--pico-color: var(--text-color-on-mint);
-	}
-	.danger-solid:hover,
-	.danger-solid:active,
-	.danger-solid:focus {
-		--pico-background-color: var(--danger-red-hover);
-		--pico-border-color: var(--danger-red-hover);
-	}
+/* --- Layout & General Card Styles --- */
+.pos-grid {
+	display: grid;
+	grid-template-columns: 1fr 380px;
+	gap: 1rem;
+	align-items: start;
+}
+.main-panel,
+.summary-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+.summary-card {
+	position: sticky;
+	top: 1rem;
+}
+.customer-search-wrapper,
+.product-search-bar {
+	position: relative;
+}
+.search-dropdown {
+	position: absolute;
+	width: 100%;
+	background: var(--pico-card-background-color);
+	border: 1px solid var(--pico-form-element-border-color);
+	border-radius: var(--pico-border-radius);
+	margin-top: 0.25rem;
+	z-index: 100;
+	max-height: 250px;
+	overflow-y: auto;
+	box-shadow: var(--pico-box-shadow);
+}
+.customer-item,
+.product-item {
+	display: block;
+	width: 100%;
+	text-align: left;
+	padding: 0.75rem 1rem;
+	border: none;
+	background-color: white;
+	color: black;
+	border-bottom: 1px solid var(--pico-card-border-color);
+	cursor: pointer;
+}
+.customer-item:last-child,
+.product-item:last-child {
+	border-bottom: none;
+}
+.customer-item:hover,
+.product-item:hover,
+.product-item.highlighted {
+	background-color: var(--pico-primary-background);
+	color: white;
+}
+.customer-info-text {
+	flex-grow: 1;
+	margin-right: 1rem;
+}
+.customer-address {
+	margin-top: 0.5rem;
+	font-size: 0.9em;
+	color: var(--pico-muted-color);
+	white-space: pre-wrap;
+}
+.customer-display {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	background-color: var(--pico-muted-background-color);
+	padding: 0.75rem 1rem;
+	border-radius: var(--pico-border-radius);
+}
 
-	/* --- General Layout & Component Styles --- */
-	.pos-grid {
-		display: grid;
-		grid-template-columns: 1fr 380px;
-		gap: 1rem;
-		align-items: start;
-	}
-	.main-panel,
-	.summary-panel {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-	.summary-card {
-		position: sticky;
-		top: 1rem;
-	}
-	.customer-search-wrapper,
-	.product-search-bar {
-		position: relative;
-	}
-	.search-dropdown {
-		position: absolute;
-		width: 100%;
-		background: var(--pico-card-background-color);
-		border: 1px solid var(--pico-form-element-border-color);
-		border-radius: var(--pico-border-radius);
-		margin-top: 0.25rem;
-		z-index: 100;
-		max-height: 250px;
-		overflow-y: auto;
-		box-shadow: var(--pico-box-shadow);
-	}
-	.customer-item,
-	.product-item {
-		display: block;
-		width: 100%;
-		text-align: left;
-		padding: 0.75rem 1rem;
-		border: none;
-		background-color: white;
-		color: black;
-		border-bottom: 1px solid var(--pico-card-border-color);
-		cursor: pointer;
-	}
-	.customer-item:last-child,
-	.product-item:last-child {
-		border-bottom: none;
-	}
-	.customer-item:hover,
-	.product-item:hover,
-	.product-item.highlighted {
-		background-color: var(--pico-primary-background);
-		color: white;
-	}
+/* --- Table Styles --- */
+.table-container {
+	max-height: 45vh;
+	overflow-y: auto;
+	margin-top: 1.5rem;
+}
+table {
+	margin-bottom: 0;
+	table-layout: fixed;
+	width: 100%;
+}
+thead th,
+tbody td {
+	text-align: center !important;
+	vertical-align: middle !important;
+}
 
-	.customer-info-text {
-		flex-grow: 1;
-		margin-right: 1rem;
-	}
+/* --- ช่องชื่อสินค้า: ชิดซ้ายแต่เว้นขอบ --- */
+.table-container th:nth-child(2),
+.table-container td:nth-child(2) {
+	text-align: left !important;
+	padding-left: 18px !important;
+}
 
-	.customer-address {
-		margin-top: 0.5rem;
-		font-size: 0.9em;
-		color: var(--pico-muted-color);
-		white-space: pre-wrap;
-	}
+/* ช่องอื่น ๆ เช่น .td-center, .td-right ให้ตรงกลางหมด */
+.td-center, .td-right {
+	text-align: center !important;
+}
 
-	.customer-display {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-		background-color: var(--pico-muted-background-color);
-		padding: 0.75rem 1rem;
-		border-radius: var(--pico-border-radius);
-	}
-	.table-container {
-		max-height: 45vh;
-		overflow-y: auto;
-		margin-top: 1.5rem;
-	}
-	table {
-		margin-bottom: 0;
-	}
-	.empty-row {
-		text-align: center;
-		padding: 2rem;
-		color: var(--pico-muted-color);
-	}
-	tbody td {
-		vertical-align: middle;
-	}
-	.quantity-control {
-		display: flex;
-		align-items: baseline;
-		justify-content: center;
-		gap: 0.5rem;
-	}
-	.small-btn {
-		padding: 0.25rem 0.5rem;
-		line-height: 1;
-	}
-	.quantity-input {
-		width: 80px;
-		text-align: center;
-		border: none;
-		background-color: transparent;
-		padding: 0.25rem 0;
-		line-height: 1;
-		-moz-appearance: textfield;
-		appearance: textfield;
-	}
-	.quantity-input::-webkit-outer-spin-button,
-	.quantity-input::-webkit-inner-spin-button {
-		-webkit-appearance: none;
-		margin: 0;
-	}
-	/* START: เพิ่ม Style */
-	.price-input,
-	.discount-input {
-		max-width: 80px;
-		text-align: right;
-		padding: 0.25rem 0.5rem;
-		height: auto;
-	}
-	/* END: เพิ่ม Style */
-	.total-label {
-		font-weight: bold;
-		font-size: 1.1em;
-	}
-	.total-input {
-		font-weight: bold;
-		font-size: 1.2em;
-		color: var(--pico-primary);
-	}
-	.summary-footer {
-		margin-top: 1rem;
-	}
-	.checkout-btn {
-		width: 100%;
-		padding: 0.75rem;
-		font-size: 1.1em;
-	}
-	.sub-footer-buttons {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 0.5rem;
-		margin-top: 0.5rem;
-	}
-	.summary-header {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.75rem;
-		margin-bottom: 1.5rem;
-		padding-bottom: 1rem;
-		border-bottom: 1px solid var(--pico-muted-border-color);
-	}
-	.date-time-section {
-		text-align: center;
-	}
-	.date {
-		font-size: 1.1em;
-		font-weight: 600;
-	}
-	.time {
-		font-size: 1em;
-		color: var(--pico-muted-color);
-	}
-	.summary-header button {
-		width: 100%;
-	}
-	.price-summary {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		gap: 0.75rem;
-		align-items: center;
-	}
-	.price-summary input {
-		text-align: right;
-		border-radius: 20px;
-		padding: 0.5rem 1rem;
-	}
+.table-container tr {
+	height: 42px;
+}
+.empty-row {
+	text-align: center;
+	padding: 2rem;
+	color: var(--pico-muted-color);
+}
+
+/* --- Input & Quantity Control Styles --- */
+/* Input ของจำนวน, ราคา, ส่วนลด สูงขึ้น, ขนาดเท่ากัน, ตัวเลขกลางแนวตั้ง */
+.quantity-input,
+.price-input,
+.discount-input {
+	width: 1200px;
+	min-width: 70px;
+	max-width: 200px;
+	height: 40px;
+	padding: 0 .5rem;
+	font-size: 1em;
+	text-align: center;
+	box-sizing: border-box;
+	display: inline-block;
+	margin: 0 auto;
+	line-height: 38px;
+}
+
+/* กล่องควบคุมจำนวนสูงขึ้น */
+.quantity-control {
+	display: inline-flex;
+	align-items: center;
+	border: 1px solid var(--pico-form-element-border-color);
+	border-radius: var(--pico-border-radius);
+	max-width: 150px;
+	width: 90px;
+	min-width: 70px;
+	height: 38px;
+	margin: 0 auto;
+	overflow: hidden;
+}
+
+/* Spinner ตั้งความสูงให้ปุ่มเท่ากับ input */
+.spinner-buttons {
+	display: flex;
+	flex-direction: column;
+	width: 24px;
+	min-width: 24px;
+	max-width: 24px;
+	height: 38px;
+}
+.spinner-buttons button {
+	padding: 0;
+	line-height: 1;
+	height: 19px;
+	border-radius: 0;
+	border: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.7em;
+	background-color: var(--pico-secondary-background-color);
+	color: var(--pico-secondary-color);
+}
+.spinner-buttons button:hover {
+	background-color: var(--pico-secondary-hover-background-color);
+}
+.spinner-buttons .spinner-up {
+	border-bottom: 1px solid var(--pico-form-element-border-color);
+}
+.small-btn {
+	padding: 0.25rem 0.5rem;
+	line-height: 1;
+}
+
+/* --- Summary Panel Styles --- */
+.price-input, .discount-input {
+	width: 110px;
+	min-width: 70px;
+	max-width: 150px;
+	text-align: center;
+}
+.total-label {
+	font-weight: bold;
+	font-size: 1.1em;
+}
+.total-input {
+	font-weight: bold;
+	font-size: 1.2em;
+	color: var(--pico-primary);
+}
+.summary-footer {
+	margin-top: 1rem;
+}
+.checkout-btn {
+	width: 100%;
+	padding: 0.75rem;
+	font-size: 1.1em;
+}
+.sub-footer-buttons {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0.5rem;
+	margin-top: 0.5rem;
+}
+.summary-header {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.75rem;
+	margin-bottom: 1.5rem;
+	padding-bottom: 1rem;
+	border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.date-time-section {
+	text-align: center;
+}
+.date {
+	font-size: 1.1em;
+	font-weight: 600;
+}
+.time {
+	font-size: 1em;
+	color: var(--pico-muted-color);
+}
+.summary-header button {
+	width: 100%;
+}
+.price-summary {
+	width: 100px
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 0.75rem;
+	align-items: center;
+}
+.price-summary input {
+	text-align: right;
+	border-radius: 20px;
+	padding: 0.5rem 1rem;
+}
+
+
 </style>
