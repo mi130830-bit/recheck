@@ -1,8 +1,6 @@
 import { prisma } from '$lib/server/prisma';
 import { error, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
-
-// Node.js modules สำหรับจัดการไฟล์
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -10,12 +8,11 @@ import path from 'path';
 export const load: PageServerLoad = async ({ params }) => {
 	const productId = Number(params.id);
 
-	// ตรวจสอบว่า ID ที่ส่งมาเป็นตัวเลขที่ถูกต้องหรือไม่
 	if (isNaN(productId)) {
 		throw error(400, 'ID สินค้าไม่ถูกต้อง');
 	}
 
-	// ค้นหาสินค้าจากฐานข้อมูลด้วย ID ที่ระบุ
+	// ค้นหาสินค้าจากฐานข้อมูล
 	const product = await prisma.product.findUnique({
 		where: { id: productId },
 		include: {
@@ -25,14 +22,11 @@ export const load: PageServerLoad = async ({ params }) => {
 		}
 	});
 
-	// ถ้าไม่พบสินค้า ให้โยน Error 404
 	if (!product) {
 		throw error(404, 'ไม่พบสินค้า');
 	}
 
-	// ✅ FIX: แก้ปัญหา Serialization Error
-	// แปลงข้อมูลประเภท Decimal (costPrice, retailPrice, etc.) ให้เป็น Number
-	// ก่อนที่จะส่งข้อมูลไปให้หน้า .svelte
+	// [สำคัญ] แก้ปัญหา Serialization Error โดยการแปลงค่า Decimal เป็น Number
 	const serializableProduct = {
 		...product,
 		costPrice: product.costPrice.toNumber(),
@@ -40,50 +34,57 @@ export const load: PageServerLoad = async ({ params }) => {
 		wholesalePrice: product.wholesalePrice ? product.wholesalePrice.toNumber() : null
 	};
 
-	// ส่งข้อมูลสินค้าที่แปลงค่าแล้วกลับไป
 	return { product: serializableProduct };
 };
 
-
-// --- 2. ฟังก์ชัน `actions` สำหรับรับข้อมูลจากฟอร์ม (เช่น อัปโหลดรูป) ---
+// --- 2. ฟังก์ชัน `actions` สำหรับจัดการฟอร์ม (เช่น อัปโหลดรูป) ---
 export const actions: Actions = {
 	updateImage: async ({ request, params }) => {
 		const productId = Number(params.id);
 		const formData = await request.formData();
 		const imageFile = formData.get('productImage') as File;
 
-		// ตรวจสอบว่ามีการส่งไฟล์มาหรือไม่
 		if (!imageFile || imageFile.size === 0) {
 			return fail(400, { message: 'กรุณาเลือกไฟล์รูปภาพ' });
 		}
 
-		// สร้างชื่อไฟล์ใหม่ที่ไม่ซ้ำกัน โดยใช้ timestamp
-		const uniqueFilename = `${Date.now()}-${imageFile.name}`;
-		// กำหนดตำแหน่งที่จะบันทึกไฟล์ (ในโฟลเดอร์ static เพื่อให้เข้าถึงได้ผ่าน URL)
+		// [ปรับปรุง] ดึงข้อมูลสินค้าเดิมเพื่อเอารูปเก่ามาลบ
+		const existingProduct = await prisma.product.findUnique({
+			where: { id: productId },
+			select: { imageUrl: true }
+		});
+
 		const uploadDir = path.join('static', 'uploads', 'products');
+		const uniqueFilename = `${Date.now()}-${imageFile.name}`;
 		const savePath = path.join(uploadDir, uniqueFilename);
 
 		try {
 			// สร้าง folder ถ้ายังไม่มี
 			await fs.mkdir(uploadDir, { recursive: true });
 
-			// อ่านไฟล์เป็น Buffer แล้วบันทึกลงในตำแหน่งที่กำหนด
+			// บันทึกไฟล์ใหม่
 			const buffer = Buffer.from(await imageFile.arrayBuffer());
 			await fs.writeFile(savePath, buffer);
+			const newImageUrl = `/uploads/products/${uniqueFilename}`;
 
-			// สร้าง URL ที่จะใช้เก็บในฐานข้อมูล
-			const imageUrl = `/uploads/products/${uniqueFilename}`;
-
-			// อัปเดตฐานข้อมูลด้วย URL ของรูปภาพใหม่
+			// อัปเดตฐานข้อมูล
 			await prisma.product.update({
 				where: { id: productId },
-				data: { imageUrl }
+				data: { imageUrl: newImageUrl }
 			});
 
-			return { success: true, message: 'อัปโหลดรูปภาพสำเร็จ' };
+			// [ปรับปรุง] ลบรูปภาพเก่า (ถ้ามี) หลังจากอัปเดตสำเร็จ
+			if (existingProduct?.imageUrl) {
+				const oldImagePath = path.join('static', existingProduct.imageUrl);
+				try {
+					await fs.unlink(oldImagePath);
+				} catch (unlinkError) {
+					console.warn(`Could not delete old image file: ${oldImagePath}`, unlinkError);
+				}
+			}
 
+			return { success: true, message: 'อัปโหลดรูปภาพสำเร็จ' };
 		} catch (err) {
-			// หากเกิดข้อผิดพลาดในการบันทึกไฟล์
 			console.error('File upload error:', err);
 			return fail(500, { message: 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์' });
 		}

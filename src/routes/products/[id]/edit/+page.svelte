@@ -2,10 +2,14 @@
 	import { enhance } from '$app/forms';
 	import type { PageData, ActionData } from './$types';
 
-	export let data: PageData;
-	export let form: ActionData;
+	// [แก้ไข] ใช้ $props() เพื่อรับ data และ form ตามมาตรฐาน Svelte 5
+	// นี่คือสาเหตุหลักของ Error ที่คุณเจอ
+	let { data, form } = $props<PageData & ActionData>();
+	
+	// [ปรับปรุง] ใช้ $derived เพื่อสร้างตัวแปร product ที่จะอัปเดตอัตโนมัติเมื่อ data เปลี่ยน
+	// ทำให้โค้ดสะอาดขึ้น ไม่ต้องใช้ $: 
+	let product = $derived(data.product);
 
-	// --- ผูกค่าเริ่มต้นของฟอร์มกับข้อมูลที่โหลดมา ---
 	let name = data.product.name;
 	let alias = data.product.alias;
 	let costPrice = data.product.costPrice;
@@ -24,6 +28,7 @@
 	let allowPriceEdit = data.product.allowPriceEdit;
 	let notTrackStock = !data.product.trackStock;
 </script>
+
 
 <main class="container">
 	<article>

@@ -1,34 +1,42 @@
-<!-- src/routes/products/+page.svelte (ปรับปรุงใหม่ - ไม่มีรูปภาพ) -->
+<!-- src/routes/products/+page.svelte -->
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import type { PageData } from './$types';
-	export let data: PageData;
-	export let form;
+	import type { PageData, ActionData } from './$types';
 
-	$: ({ products, totalItems, currentPage, totalPages, query, limit } = data);
-	let searchQuery = query ?? '';
-	let debounceTimer: NodeJS.Timeout;
+	// ✅ FIX: รับ props ทั้ง data และ form ด้วย $props()
+	let { data, form } = $props<{ data: PageData; form: ActionData }>();
 
-	function handleSearchInput() {
-		clearTimeout(debounceTimer);
-		debounceTimer = setTimeout(() => {
-			const params = new URLSearchParams($page.url.searchParams.toString());
-			params.set('query', searchQuery);
-			params.set('page', '1');
-			goto(`?${params.toString()}`, { keepFocus: true, noScroll: true, replaceState: true });
-		}, 300);
-	}
+	// ✅ FIX: ใช้ $state สำหรับค่าที่ผู้ใช้ป้อนเข้ามาใน UI
+	let searchQuery = $state(data.query ?? '');
+
+	// ✅ FIX: ใช้ $effect เพื่อจัดการ Debounce สำหรับการค้นหา
+	$effect(() => {
+		// ฟังก์ชันนี้จะทำงานทุกครั้งที่ searchQuery เปลี่ยนแปลง
+		const debounceTimer = setTimeout(() => {
+			// ตรวจสอบว่าค่าที่พิมพ์กับค่าใน URL ตรงกันหรือไม่ เพื่อป้องกันการ navigate ซ้ำซ้อน
+			const currentQueryInUrl = $page.url.searchParams.get('query') ?? '';
+			if (searchQuery !== currentQueryInUrl) {
+				const params = new URLSearchParams($page.url.searchParams.toString());
+				params.set('query', searchQuery);
+				params.set('page', '1'); // กลับไปหน้า 1 เสมอเมื่อมีการค้นหาใหม่
+				goto(`?${params.toString()}`, { keepFocus: true, noScroll: true, replaceState: true });
+			}
+		}, 300); // รอ 300ms หลังผู้ใช้หยุดพิมพ์
+
+		// Cleanup function: จะทำงานเมื่อ effect ถูกรันใหม่ หรือ component ถูกทำลาย
+		return () => {
+			clearTimeout(debounceTimer);
+		};
+	});
 </script>
 
 <main class="container">
 	<header class="header-container">
-		<h1>รายการสินค้า ({totalItems} รายการ)</h1>
+		<h1>รายการสินค้า ({data.totalItems} รายการ)</h1>
 		<div class="button-group">
-			<a href="/products/import" role="button" class="secondary outline mint-outline"
-				>นำเข้าจาก Excel</a
-			>
+			<a href="/products/import" role="button" class="secondary outline mint-outline">นำเข้าจาก Excel</a>
 			<a href="/products/new" role="button" class="mint-solid">+ เพิ่มสินค้าใหม่</a>
 		</div>
 	</header>
@@ -41,7 +49,6 @@
 			name="query"
 			placeholder="บาร์โค้ด, ชื่อสินค้า..."
 			bind:value={searchQuery}
-			on:input={handleSearchInput}
 		/>
 	</div>
 
@@ -51,27 +58,25 @@
 		</aside>
 	{/if}
 
-	{#if products.length === 0}
+	{#if data.products.length === 0}
 		<article><p>ไม่พบข้อมูลสินค้าที่ตรงกับเงื่อนไขการค้นหา</p></article>
 	{:else}
 		<div style="overflow-x: auto;">
 			<table>
 				<thead>
 					<tr>
-						<!-- ✅ REMOVE: ลบ Header 'รูปภาพ' ออก -->
 						<th style="width: 5%;">ลำดับที่</th>
 						<th style="width: 20%;">บาร์โค้ด</th>
 						<th>ชื่อสินค้า</th>
-						<th style="text-align: center; width: 15%;">จำนวนคงเหลือ</th>
+						<th style="text-align: center; width: 15%;">คงเหลือ</th>
 						<th style="text-align: right; width: 15%;">ราคาปลีก (บาท)</th>
 						<th style="width: 180px;">การกระทำ</th>
 					</tr>
 				</thead>
 				<tbody>
-					{#each products as product, i (product.id)}
+					{#each data.products as product, i (product.id)}
 						<tr>
-							<!-- ✅ REMOVE: ลบข้อมูลแถว 'รูปภาพ' ออก -->
-							<td>{(currentPage - 1) * limit + i + 1}</td>
+							<td>{(data.currentPage - 1) * data.limit + i + 1}</td>
 							<td>{product.barcode || '-'}</td>
 							<td><strong>{product.name}</strong></td>
 							<td style="text-align: center;">{product.stockQuantity}</td>
@@ -84,19 +89,7 @@
 										class="outline mint-outline"
 										title="แก้ไข"
 									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											width="16"
-											height="16"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											><path d="M12 20h9" /><path
-												d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"
-											/></svg
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /></svg
 										>
 									</a>
 
@@ -106,21 +99,7 @@
 										class="secondary outline"
 										title="ดูรายละเอียดสินค้า"
 									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											width="16"
-											height="16"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle
-												cx="5"
-												cy="12"
-												r="1"
-											/></svg
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></svg
 										>
 									</a>
 
@@ -134,24 +113,7 @@
 												if (!confirm(`ยืนยันการลบ "${product.name}"?`)) e.preventDefault();
 											}}
 										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												width="16"
-												height="16"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												><polyline points="3 6 5 6 21 6" /><path
-													d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-												/><line x1="10" y1="11" x2="10" y2="17" /><line
-													x1="14"
-													y1="11"
-													x2="14"
-													y2="17"
-												/></svg
+											<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg
 											>
 										</button>
 									</form>
@@ -163,11 +125,20 @@
 			</table>
 		</div>
 	{/if}
+
+	<!-- Pagination Component would go here -->
+	<div class="pagination-controls">
+		{#if data.currentPage > 1}
+			<a href="?page={data.currentPage - 1}&query={data.query}" role="button" class="secondary outline">ก่อนหน้า</a>
+		{/if}
+		<span>หน้า {data.currentPage} / {data.totalPages}</span>
+		{#if data.currentPage < data.totalPages}
+			<a href="?page={data.currentPage + 1}&query={data.query}" role="button" class="secondary outline">ถัดไป</a>
+		{/if}
+	</div>
 </main>
 
 <style>
-	/* ✅ REMOVE: ลบ Style ของ .product-thumbnail ออก */
-
 	:root {
 		--mint-green: #15cb24;
 		--mint-green-hover: #26c217;
@@ -185,7 +156,6 @@
 		margin-bottom: 1rem;
 		margin-top: 1rem;
 	}
-
 	.header-container h1 {
 		margin-bottom: 0;
 	}
@@ -207,14 +177,12 @@
 		margin-bottom: 0;
 		max-width: 400px;
 	}
-
 	.action-buttons {
 		display: flex;
 		gap: 0.5rem;
 		align-items: stretch;
 		height: 40px;
 	}
-
 	.action-buttons > * {
 		flex: 1 1 0;
 		min-width: 0;
@@ -222,7 +190,6 @@
 		padding: 0;
 		margin-bottom: 0;
 	}
-
 	.action-buttons a[role='button'],
 	.action-buttons button {
 		width: 100%;
@@ -235,13 +202,11 @@
 		box-sizing: border-box;
 		border-radius: 20px;
 	}
-
 	.action-buttons form {
 		flex: 1 1 0;
 		height: 100%;
 		display: flex;
 	}
-
 	.action-buttons form button {
 		width: 100%;
 		height: 100%;
@@ -255,7 +220,6 @@
 	.mint-outline {
 		border-radius: 20px;
 	}
-
 	.mint-solid {
 		--pico-background-color: var(--mint-green);
 		--pico-border-color: var(--mint-green);
@@ -305,5 +269,12 @@
 	}
 	.error-message p {
 		margin: 0;
+	}
+	.pagination-controls {
+		margin-top: 1.5rem;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 1rem;
 	}
 </style>

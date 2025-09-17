@@ -1,8 +1,9 @@
-<!-- src/routes/categories/new/+page.svelte -->
-
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	export let form; // รับข้อมูลและ Error จาก server action
+	import type { ActionData } from './$types'; // 1. เพิ่มการ import ActionData
+
+	// 2. [แก้ไข] เปลี่ยนจากการใช้ export let มาเป็น $props()
+	let { form } = $props<{ form?: ActionData }>();
 </script>
 
 <main class="container">
@@ -12,12 +13,10 @@
 		</header>
 
 		<form method="POST" use:enhance>
-			<!-- แสดงข้อความ Error ถ้ามี -->
 			{#if form?.error}
 				<div class="form-error">{form.error}</div>
 			{/if}
 
-			<!-- ช่องกรอกข้อมูล -->
 			<label for="name">
 				ชื่อประเภท *
 				<input
@@ -33,7 +32,6 @@
 				<small class="error-text">{form.error}</small>
 			{/if}
 
-			<!-- ปุ่มยกเลิกและบันทึก -->
 			<footer class="form-actions">
 				<a href="/categories" role="button">ยกเลิก</a>
 				<button type="submit">บันทึก</button>
@@ -90,7 +88,7 @@
 		width: 120px;
 		padding: center;
 	}
-	    /*2. สไตล์สำหรับปุ่ม "ยกเลิก" (สีแดง)  *** ปรับสีปุ่มยกเลิกที่นี่ ***  */
+	    /*2. สไตล์สำหรับปุ่ม "ยกเลิก" (สีแดง)  *** ปรับสีปุ่มยกเลิกที่นี่ *** */
 	.form-actions a[role='button'] {
 		background-color: #e53306; /* สีปกติ */
 		color: #fff;
@@ -99,7 +97,7 @@
 		background-color: #bc0a0a; /* สีตอนเอาเมาส์ไปชี้ (เข้มขึ้น) */
 	}
 
-	/*     3. สไตล์สำหรับปุ่ม "บันทึก" (สีเขียว)       *** ปรับสีปุ่มบันทึกที่นี่ ***  */
+	/* 3. สไตล์สำหรับปุ่ม "บันทึก" (สีเขียว)       *** ปรับสีปุ่มบันทึกที่นี่ *** */
 	.form-actions button {
 		background-color: #15cb24; /* สีปกติ */
 		color: #fff;

@@ -1,34 +1,40 @@
-<!-- src/lib/components/AddModal.svelte (Final Refactored Version) -->
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { createEventDispatcher } from 'svelte';
 
-	export let showModal: boolean;
-	export let itemType: 'Category' | 'Unit';
-	export let title: string;
+	// 1. รับ props และ callbacks ด้วย $props()
+	const { showModal, itemType, title, onadded, onclose } = $props<{
+		showModal: boolean;
+		itemType: 'Category' | 'Unit';
+		title: string;
+		onadded: (newItem: any) => void;
+		onclose: () => void;
+	}>();
 
-	const dispatch = createEventDispatcher();
-	let name = '';
-	let error: string | null = null;
-	let isLoading = false;
+	// 2. ใช้ $state() สำหรับ state ที่ต้อง reactive
+	let name = $state('');
+	let error = $state<string | null>(null);
+	let isLoading = $state(false);
 
-	function closeModal() {
-		showModal = false;
-		name = '';
-		error = null;
-	}
+	// 3. ใช้ $effect() เพื่อ reset ค่าเมื่อ modal เปิด
+	$effect(() => {
+		if (showModal) {
+			name = '';
+			error = null;
+			// isLoading ไม่ต้อง reset ที่นี่ เพราะ form enhance จัดการอยู่แล้ว
+		}
+	});
 
 	function handleSuccess(newItem: any) {
-		dispatch('added', newItem);
-		closeModal();
+		onadded(newItem); // 4. เรียกใช้ callback onadded() แทน dispatch
+		onclose();      // เรียก onclose() เพื่อปิด
 	}
 </script>
 
 {#if showModal}
-	<dialog open on:close={closeModal}>
+	<dialog open on:close={onclose}>
 		<article>
 			<header>
-				<button aria-label="Close" class="close" on:click|preventDefault={closeModal}></button>
+				<button aria-label="Close" class="close" on:click|preventDefault={onclose}></button>
 				<strong>{title}</strong>
 			</header>
 
@@ -53,11 +59,10 @@
 
 				{#if error}
 					<small class="error-text">{error}</small>
-				{/if}
+				{if}
 
-				<!-- [แก้ไข] ใช้ footer และโครงสร้างปุ่มแบบใหม่ -->
 				<footer class="modal-actions">
-					<button type="button" on:click={closeModal} disabled={isLoading}>ยกเลิก</button>
+					<button type="button" on:click={onclose} disabled={isLoading}>ยกเลิก</button>
 					<button type="submit" disabled={isLoading}>{isLoading ? 'กำลังบันทึก...' : 'บันทึก'}</button>
 				</footer>
 			</form>

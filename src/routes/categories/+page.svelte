@@ -1,10 +1,11 @@
 <script lang="ts">
-  import type { PageData } from './$types';
-  import { enhance } from '$app/forms';
+  import type { PageData, ActionData } from './$types';
   import { invalidateAll } from '$app/navigation';
-  import { applyAction } from '$app/forms';
-  export let data: PageData;
-  export let form;
+  import { applyAction, enhance } from '$app/forms';
+
+  // [แก้ไข] เปลี่ยนมาใช้ $props() ตามหลัก Svelte 5 (Runes)
+  let { data, form } = $props<{ data: PageData, form?: ActionData }>();
+
   function confirmDelete(event: MouseEvent) {
     if (!confirm('คุณแน่ใจหรือไม่ว่าต้องการลบรายการนี้?')) {
       event.preventDefault();
@@ -44,12 +45,12 @@
                     </svg>
                   </a>
                   <form method="POST" action="?/delete" use:enhance={() => {
-                    return async ({ result }) => {
-                      if (result.type === 'success') {
-                        await invalidateAll();
-                      }
-                      await applyAction(result);
-                    };
+                      return async ({ result }) => {
+                        if (result.type === 'success') {
+                          await invalidateAll();
+                        }
+                        await applyAction(result);
+                      };
                   }}>
                     <input type="hidden" name="id" value={category.id} />
                     <button type="submit" class="icon-btn delete-btn" title="ลบ" on:click={confirmDelete}>
@@ -163,14 +164,17 @@
     justify-content: flex-end; /* จัดให้ปุ่มทั้งหมดชิดขวา */
     gap: 0.5rem;
     align-items: stretch; /* จัดให้ทุกอย่างยืดความสูงเท่ากัน */
-    height: 40px; /* กำหนดความสูงของแถวปุ่ม */
+    height: 40px;
+    /* กำหนดความสูงของแถวปุ่ม */
   }
   .action-buttons > * {
     flex: 1 1 0;
-    min-width: 0; /* ป้องกันล้น */
+    min-width: 0;
+    /* ป้องกันล้น */
     height: 100%; /* ยืดความสูงให้เท่ากับ .action-buttons */
     padding: 0;
-    margin-bottom: 0; /* เรียก override ค่าจาก pico.css */
+    margin-bottom: 0;
+    /* เรียก override ค่าจาก pico.css */
   }
   .action-buttons a[role='button'],
   .action-buttons button {

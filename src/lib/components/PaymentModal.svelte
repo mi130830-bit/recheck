@@ -1,126 +1,125 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	// [แก้ไข] เพิ่ม customerId เข้าไปใน props เพื่อใช้ตรวจสอบ
+	let { showModal, totalAmount, customerId, onconfirm, onclose } = $props<{
+		showModal: boolean;
+		totalAmount: number;
+		customerId?: number | null; // <-- รับ customerId เข้ามา
+		onconfirm: (detail: {
+			paymentType: 'COMPLETED' | 'CREDIT';
+			received: number;
+			change: number;
+			notifyDispatch?: boolean; // <-- เพิ่ม flag สำหรับแจ้งเตือน
+		}) => void;
+		onclose: () => void;
+	}>();
 
-	export let showModal: boolean;
-	export let totalAmount: number;
+	let receivedAmount = $state<number | null>(null);
+	let isPaid = $state(false);
 
-	let receivedAmount: number | null = null;
-	let isPaid = false; // State to track if payment is confirmed
+	const changeAmount = $derived(
+		receivedAmount && receivedAmount > totalAmount ? receivedAmount - totalAmount : 0
+	);
 
-	const dispatch = createEventDispatcher();
+	$effect(() => {
+		if (showModal) {
+			isPaid = false;
+			receivedAmount = null;
+		}
+	});
 
-	// --- Functions ---
-
-	// Real-time change calculation
-	$: changeAmount = receivedAmount && receivedAmount > totalAmount ? receivedAmount - totalAmount : 0;
-
-	/** Handles cash payment confirmation */
 	function handleConfirm() {
-		dispatch('confirm', {
+		onconfirm({
 			paymentType: 'COMPLETED',
 			received: receivedAmount || totalAmount,
-			change: changeAmount
+			change: changeAmount,
+			notifyDispatch: false // ไม่แจ้งเตือน
 		});
-		isPaid = true; // Change state to show print/close buttons
+		isPaid = true;
 	}
 
-	/** Handles credit sale confirmation */
 	function handleCreditSale() {
-		dispatch('confirm', {
+		onconfirm({
 			paymentType: 'CREDIT',
 			received: 0,
-			change: 0
+			change: 0,
+			notifyDispatch: false // ไม่แจ้งเตือน
 		});
-		isPaid = true; // Change state to show print/close buttons
+		isPaid = true;
 	}
 
-	/** Closes the modal and resets its state */
-	function closeModal() {
-		dispatch('close');
+	// [เพิ่ม] ฟังก์ชันสำหรับยืนยันและแจ้งเตือนการจัดส่ง
+	function handleConfirmAndDispatch() {
+		onconfirm({
+			paymentType: 'COMPLETED',
+			received: receivedAmount || totalAmount,
+			change: changeAmount,
+			notifyDispatch: true // ส่งสัญญาณให้แจ้งเตือน
+		});
+		isPaid = true;
 	}
 
-	/** Resets the component state when the modal is opened */
-	function resetState() {
-		isPaid = false;
-		receivedAmount = null;
-	}
 
 	// Placeholder functions for printing
-	function printReceipt() {
-		console.log('Printing Receipt...');
-		// Add your receipt printing logic here
-	}
-	function printTaxInvoice() {
-		console.log('Printing Tax Invoice...');
-		// Add your tax invoice printing logic here
-	}
-	function printDeliverySlip() {
-		console.log('Printing Delivery Slip...');
-		// Add your delivery slip printing logic here
-	}
-
-	// Reset state every time the modal becomes visible
-	$: if (showModal) {
-		resetState();
-	}
+	function printReceipt() { console.log('Printing Receipt...'); }
+	function printTaxInvoice() { console.log('Printing Tax Invoice...'); }
+	function printDeliverySlip() { console.log('Printing Delivery Slip...'); }
 </script>
 
 {#if showModal}
-	<dialog open on:close={closeModal}>
+	<dialog open onclose={onclose}>
 		<article>
 			<header>
-				<button aria-label="Close" class="close" on:click={closeModal}></button>
+				<button aria-label="Close" class="close" onclick={onclose}></button>
 				<strong>รับเงิน / คำนวณเงินทอน</strong>
 			</header>
 
 			<div class="modal-body">
-				<div class="summary-row">
-					<span>ยอดชำระทั้งหมด:</span>
-					<span class="total">{totalAmount.toFixed(2)} บาท</span>
+				<div class="summary-row total">
+					<span>ยอดชำระ</span>
+					<span>{totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
 				</div>
-
-				<label for="received">
-					รับเงินมา
+				<label for="receivedAmount">
+					รับเงิน
 					<input
 						type="number"
-						id="received"
-						placeholder="กรอกจำนวนเงินที่รับ"
+						id="receivedAmount"
 						bind:value={receivedAmount}
-						min={totalAmount}
+						placeholder="กรอกจำนวนเงินที่รับ..."
+						min={0}
+						step="any"
 						disabled={isPaid}
+						autofocus
 					/>
 				</label>
-
-				<div class="summary-row">
-					<span>เงินทอน:</span>
-					<span class="change">{changeAmount.toFixed(2)} บาท</span>
+				<div class="summary-row change">
+					<span>เงินทอน</span>
+					<span>{changeAmount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
 				</div>
 			</div>
 
 			<footer>
 				{#if !isPaid}
 					<div class="payment-actions">
-						<button class="credit-sale" on:click={handleCreditSale}>บันทึกเป็นขายเชื่อ</button>
-						<button
-							on:click={handleConfirm}
-							disabled={!receivedAmount || receivedAmount < totalAmount}
-						>
-							ยืนยันการชำระเงิน (เงินสด)
+						<button class="credit-sale-btn" onclick={handleCreditSale} disabled={!customerId}>
+							บันทึกเป็นขายเชื่อ
+						</button>
+						<button class="confirm-btn" onclick={handleConfirm} disabled={!receivedAmount || receivedAmount < totalAmount}>
+							ยืนยันการชำระเงิน
+						</button>
+						<button class="dispatch-btn" onclick={handleConfirmAndDispatch} disabled={!receivedAmount || receivedAmount < totalAmount || !customerId}>
+							ยืนยัน & แจ้งส่งของ
 						</button>
 					</div>
+					{#if !customerId}
+						<small class="notice-text">*ต้องเลือกลูกค้าเพื่อเปิดใช้งานปุ่ม "ขายเชื่อ" และ "แจ้งส่งของ"</small>
+					{/if}
 				{:else}
 					<div class="post-payment-actions">
-						<button on:click={closeModal}>ปิด</button>
+						<button onclick={onclose}>ปิด</button>
 						<div class="print-options">
-							<button class="secondary outline small" on:click={printReceipt}>
-								พิมพ์ใบเสร็จ
-							</button>
-							<button class="secondary outline small" on:click={printTaxInvoice}>
-								ใบกำกับภาษี
-							</button>
-							<button class="secondary outline small" on:click={printDeliverySlip}>
-								ใบส่งของ
-							</button>
+							<button class="secondary outline small" onclick={printReceipt}>พิมพ์ใบเสร็จ</button>
+							<button class="secondary outline small" onclick={printTaxInvoice}>ใบกำกับภาษี</button>
+							<button class="secondary outline small" onclick={printDeliverySlip}>ใบส่งของ</button>
 						</div>
 					</div>
 				{/if}
@@ -130,119 +129,72 @@
 {/if}
 
 <style>
-	/* --- Color Palette --- */
-	:root {
-		/* Green Tones (Primary Action) */
-		--theme-green-dark: #28e132;
-		--theme-green-darker: #22c52a; /* Darker shade for hover */
-		--theme-green-text: #1a8c1f; /* Darker shade for text */
-
-		/* Blue Tones (Credit Sale Action) */
-		--theme-blue-main: #36a3fc;
-		--theme-blue-darker: #4490cf;
-		--theme-blue-text: #ffffff;
-
-		/* Neutral Tones (Print buttons, etc.) */
-		--theme-neutral-bg: #f5f5f5;
-		--theme-neutral-border: #e0e0e0;
-		--theme-neutral-text: #757575;
+	/* [แก้ไข CSS] เพิ่ม style สำหรับปุ่มใหม่และปรับปรุงของเก่า */
+	.payment-actions {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); /* ทำให้ปุ่มยืดหยุ่น */
+		gap: 1rem;
+	}
+	.payment-actions button {
+		padding: 0.75rem;
+		font-weight: bold;
+		border: none;
+		border-radius: var(--pico-border-radius);
+		cursor: pointer;
+		transition: background-color 0.2s;
+		color: white;
 	}
 
+	.credit-sale-btn { background-color: #007bff; } /* สีน้ำเงิน */
+	.credit-sale-btn:hover { background-color: #0069d9; }
+
+	.confirm-btn { background-color: #28a745; } /* สีเขียว */
+	.confirm-btn:hover { background-color: #218838; }
+
+	.dispatch-btn { background-color: #17a2b8; } /* สีฟ้าอมเขียว */
+	.dispatch-btn:hover { background-color: #138496; }
+
+	.payment-actions button:disabled {
+		background-color: #6c757d;
+		cursor: not-allowed;
+	}
+
+	.notice-text {
+		display: block;
+		text-align: center;
+		margin-top: 1rem;
+		color: var(--pico-muted-color);
+	}
+
+
+	/* --- CSS ส่วนอื่นๆ เหมือนเดิม --- */
+	:root {
+		--theme-green-text: #155724;
+		--theme-neutral-bg: #f8f9fa;
+		--theme-neutral-border: #dee2e6;
+		--theme-neutral-text: #6c757d;
+	}
 	.modal-body {
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
+		padding: 1rem 0;
 	}
 	.summary-row {
 		display: flex;
 		justify-content: space-between;
 		align-items: baseline;
+		padding: 0 0.5rem;
 	}
-	.total {
-		font-size: 1.5em;
-		font-weight: bold;
+	.total { font-size: 1.5em; font-weight: bold; }
+	.change { font-size: 1.2em; font-weight: bold; color: var(--theme-green-text); }
+	footer { padding-top: 1rem; }
+	.post-payment-actions { display: flex; flex-direction: column; gap: 1rem; width: 100%; }
+	.print-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
+	.post-payment-actions button {
+		background-color: #6c757d; color: white;
 	}
-	.change {
-		font-size: 1.2em;
-		font-weight: bold;
-		color: var(--theme-green-text);
-	}
-
-	/* --- Footer Styles --- */
-	footer {
-		padding-top: 1rem;
-	}
-	.payment-actions {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 1rem;
-	}
-
-	.post-payment-actions {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		width: 100%;
-	}
-	.print-options {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: 0.5rem;
-	}
-	.print-options button.small {
-		font-size: 0.8rem;
-		padding: 0.5rem;
-	}
-
-	/* === Button Styles === */
-
-	/* Default Button (Vibrant Green) */
-	button {
-		background-color: var(--theme-green-dark);
-		color: white;
-		border: 1px solid var(--theme-green-dark);
-		transition: background-color 0.2s;
-	}
-
-	button:is(:hover, :active, :focus) {
-		background-color: var(--theme-green-darker);
-		border-color: var(--theme-green-darker);
-	}
-
-	/* Credit Sale Button (Pastel Blue) */
-	button.credit-sale {
-		background-color: var(--theme-blue-main);
-		color: var(--theme-blue-text);
-		border-color: var(--theme-blue-main);
-	}
-
-	button.credit-sale:is(:hover, :active, :focus) {
-		background-color: var(--theme-blue-darker);
-		border-color: var(--theme-blue-darker);
-		color: white;
-	}
-
-	/* Print Buttons (Neutral / Secondary Outline) */
-	button.secondary.outline {
-		background-color: transparent;
-		color: var(--theme-neutral-text);
-		border-color: var(--theme-neutral-border);
-	}
-
-	button.secondary.outline:is(:hover, :active, :focus) {
-		background-color: var(--theme-neutral-bg);
-		color: var(--theme-neutral-text);
-		border-color: var(--theme-neutral-border);
-	}
-
-	/* Header Close button */
-	header .close {
-		color: var(--theme-neutral-text);
-		background-color: transparent;
-		border: none;
-	}
-	header .close:is(:hover, :active, :focus) {
-		color: black;
-		background-color: transparent;
-	}
+	button.secondary.outline { background-color: transparent; color: var(--theme-neutral-text); border-color: var(--theme-neutral-border); }
+	button.secondary.outline:is(:hover, :active, :focus) { background-color: var(--theme-neutral-bg); }
+	header .close { color: var(--theme-neutral-text); background-color: transparent; border: none; }
 </style>

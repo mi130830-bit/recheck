@@ -1,16 +1,19 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
 	import type { Order, OrderItem, Product } from '@prisma/client';
 
 	type SearchResult = (OrderItem & { product: Product; order: Order })[];
 
-	export let showModal: boolean;
+	// 1. รับ props ด้วย $props() แทน export let
+	const { showModal, onselectOrder, onclose } = $props<{
+		showModal: boolean;
+		onselectOrder: (orderNumber: string) => void;
+		onclose: () => void;
+	}>();
 
-	let searchQuery = '';
-	let results: SearchResult = [];
-	let isLoading = false;
-
-	const dispatch = createEventDispatcher();
+	// 2. ใช้ $state() สำหรับตัวแปรที่ต้องการให้ Svelte ติดตามการเปลี่ยนแปลง
+	let searchQuery = $state('');
+	let results = $state<SearchResult>([]);
+	let isLoading = $state(false);
 
 	async function searchItems() {
 		if (searchQuery.trim().length < 2) return;
@@ -25,20 +28,14 @@
 		}
 	}
 
-	function selectBill(orderNumber: string) {
-		dispatch('selectOrder', orderNumber);
-	}
-
-	function closeModal() {
-		dispatch('close');
-	}
+	// 3. ไม่ต้องใช้ dispatch แล้ว สามารถเรียกใช้ callback function ที่รับมาจาก props ได้โดยตรง
 </script>
 
 {#if showModal}
-	<dialog open on:close={closeModal} on:click|self={closeModal}>
+	<dialog open on:close={onclose} on:click|self={onclose}>
 		<article style="min-width: 80vw; max-width: 1200px;">
 			<header>
-				<button aria-label="Close" class="close" on:click={closeModal}></button>
+				<button aria-label="Close" class="close" on:click={onclose}></button>
 				<h3>ค้นหาบิลอย่างละเอียดจากสินค้า</h3>
 			</header>
 
@@ -75,7 +72,7 @@
 									<td style="text-align: center;">{item.quantity}</td>
 									<td style="text-align: center;">{item.returnedQuantity}</td>
 									<td>
-										<button class="outline" on:click={() => selectBill(item.order.orderNumber)}>
+										<button class="outline" on:click={() => onselectOrder(item.order.orderNumber)}>
 											เลือกบิลนี้
 										</button>
 									</td>
@@ -86,7 +83,7 @@
 				{/if}
 			</div>
 			<footer>
-				<button class="secondary" on:click={closeModal}>ปิด</button>
+				<button class="secondary" on:click={onclose}>ปิด</button>
 			</footer>
 		</article>
 	</dialog>
@@ -95,13 +92,13 @@
 <style>
 :root {
   /* ตัวแปรสี */
-  --color-primary: #4dd30f;         /* สีปุ่มหลัก */
+  --color-primary: #4dd30f; /* สีปุ่มหลัก */ [cite: 7]
   --color-primary-hover: #0bcc2f;   /* สีปุ่มหลักเมื่อ hover */
   --color-secondary: #ed620c;       /* สีปุ่มรอง */
-  --color-secondary-hover: #e91506; /* สีปุ่มรองเมื่อ hover */
+  --color-secondary-hover: #e91506; /* สีปุ่มรองเมื่อ hover */ [cite: 8]
   --color-outline: #147db7;         /* สีปุ่มขอบ */
   --color-outline-hover: #105a8b;   /* สีปุ่มขอบเมื่อ hover */
-  --color-text-on-primary: #ffffff; /* สีข้อความบนปุ่ม */
+  --color-text-on-primary: #ffffff; /* สีข้อความบนปุ่ม */ [cite: 9]
   --color-text-on-secondary: #ffffff;
   --color-text-on-outline: #147db7;
 }
@@ -112,7 +109,7 @@ button[type="submit"] {
   background-color: var(--color-primary);
   color: var(--color-text-on-primary);
   border: none;
-  transition: background-color 0.3s ease;
+  transition: background-color 0.3s ease; [cite: 10]
   cursor: pointer;
 }
 
@@ -124,14 +121,14 @@ button[type="submit"]:hover {
 /* ปุ่มรอง (background สีเทาเข้ม) */
 button.secondary {
   background-color: var(--color-secondary);
-  color: var(--color-text-on-secondary);
+  color: var(--color-text-on-secondary); [cite: 11]
   border: none;
   transition: background-color 0.3s ease;
   cursor: pointer;
 }
 
 button.secondary:hover {
-  background-color: var(--color-secondary-hover);
+  background-color: var(--color-secondary-hover); [cite: 12]
 }
 
 /* ปุ่มขอบ (outline) */
@@ -140,7 +137,7 @@ button.outline {
   border: 2px solid var(--color-outline);
   color: var(--color-text-on-outline);
   transition: all 0.3s ease;
-  cursor: pointer;
+  cursor: pointer; [cite: 13]
 }
 
 button.outline:hover {

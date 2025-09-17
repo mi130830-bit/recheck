@@ -1,106 +1,126 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import type { PageData } from './$types';
 	import type { Product, Customer, Order, OrderItem } from '@prisma/client';
 	import PaymentModal from '$lib/components/PaymentModal.svelte';
 	import HeldBillsModal from '$lib/components/HeldBillsModal.svelte';
 	import SaleSuccessModal from '$lib/components/SaleSuccessModal.svelte';
 
+	let { data } = $props<PageData>();
 	type FullOrder = Order & { customer: Customer | null; items: (OrderItem & { product: Product })[] };
 
-	// --- State ---
-	let productSearchQuery = '';
-	let customerSearchQuery = '';
-	let productSearchResults: Product[] = [];
-	let customerSearchResults: Customer[] = [];
-	let cart: (Product & { quantity: number; discount: number })[] = [];
-	let selectedCustomer: Customer | null = null;
-	let isLoading = false;
-	let productDebounceTimer: NodeJS.Timeout;
-	let customerDebounceTimer: NodeJS.Timeout;
-	let showPaymentModal = false;
-	let showHeldBillsModal = false;
-	let showSaleSuccessModal = false;
-	let newOrderId: number | null = null;
-	let loadedHeldBillId: number | null = null;
-	let heldBillsCount = 0;
-	let highlightedIndex = -1;
-	let currentDate = '';
-	let currentTime = '';
-	let timer: NodeJS.Timeout;
-	let billDiscount = 0;
+	// --- State สำหรับการค้นหา ---
+	let productSearchQuery = $state('');
+	let customerSearchQuery = $state('');
+	let productSearchResults = $state<Product[]>([]);
+	let customerSearchResults = $state<Customer[]>([]);
+	let productSearchLoading = $state(false);
+	let customerSearchLoading = $state(false);
 
-	// --- Lifecycle Hooks ---
-	onMount(async () => {
-		timer = setInterval(() => {
-			const now = new Date();
-			currentDate = now.toLocaleDateString('th-TH', {
-				day: 'numeric',
-				month: 'long',
-				year: 'numeric',
-				calendar: 'buddhist'
-			});
-			currentTime = now.toLocaleTimeString('th-TH', {
-				hour: '2-digit',
-				minute: '2-digit',
-				second: '2-digit'
-			});
-		}, 1000);
+	// --- State สำหรับการทำงานหลัก ---
+	let cart = $state<(Product & { quantity: number; discount: number })[]>([]);
+	// [แก้ไข] แก้ไขการกำหนด Type ของ selectedCustomer ให้ถูกต้อง
+	let selectedCustomer = $state<Customer | null>(null);
+	let isLoading = $state(false);
+	let showPaymentModal = $state(false);
+	let showHeldBillsModal = $state(false);
+	let showSaleSuccessModal = $state(false);
+	let newOrderId = $state<number | null>(null);
+	let loadedHeldBillId = $state<number | null>(null);
+	let heldBillsCount = $state(0);
+	let highlightedIndex = $state(-1);
+	let currentDate = $state('');
+	let currentTime = $state('');
+	let billDiscount = $state(0);
 
-		try {
-			const response = await fetch('/api/orders/hold');
-			if (response.ok) {
-				const heldBills = await response.json();
-				heldBillsCount = heldBills.length;
-			}
-		} catch (err) {
-			console.error('Failed to fetch held bills count:', err);
-		}
-	});
-
-	onDestroy(() => {
-		clearInterval(timer);
-	});
-
-	// --- Functions ---
-	function handleProductSearchInput() {
-		clearTimeout(productDebounceTimer);
-		productDebounceTimer = setTimeout(() => searchProducts(), 300);
-	}
-
+	// --- ฟังก์ชันการทำงาน (API Calls) ---
 	async function searchProducts() {
-		highlightedIndex = -1;
-		if (productSearchQuery.trim().length === 0) {
+		if (productSearchQuery.trim().length < 2) {
 			productSearchResults = [];
 			return;
 		}
-		isLoading = true;
+		productSearchLoading = true;
 		try {
 			const response = await fetch(`/api/products/search?q=${encodeURIComponent(productSearchQuery)}`);
-			if (response.ok) productSearchResults = await response.json();
+			if (response.ok) {
+				productSearchResults = await response.json();
+			}
+		} catch (err) {
+			console.error("Failed to search products:", err);
+			productSearchResults = [];
 		} finally {
-			isLoading = false;
+			productSearchLoading = false;
+			highlightedIndex = -1;
 		}
-	}
-
-	function handleCustomerSearchInput() {
-		clearTimeout(customerDebounceTimer);
-		customerDebounceTimer = setTimeout(() => searchCustomers(), 300);
 	}
 
 	async function searchCustomers() {
-		if (customerSearchQuery.trim().length === 0) {
+		if (customerSearchQuery.trim().length < 2) {
 			customerSearchResults = [];
 			return;
 		}
-		isLoading = true;
+		customerSearchLoading = true;
 		try {
 			const response = await fetch(`/api/customers/search?q=${encodeURIComponent(customerSearchQuery)}`);
-			if (response.ok) customerSearchResults = await response.json();
+			if (response.ok) {
+				customerSearchResults = await response.json();
+			}
+		} catch (err) {
+			console.error("Failed to search customers:", err);
+			customerSearchResults = [];
 		} finally {
-			isLoading = false;
+			customerSearchLoading = false;
 		}
 	}
 
+	// --- Debounce Effect สำหรับการค้นหา ---
+	let productDebounceTimer: number;
+	$effect(() => {
+		clearTimeout(productDebounceTimer);
+		productDebounceTimer = setTimeout(() => {
+			searchProducts();
+		}, 300);
+	});
+
+	let customerDebounceTimer: number;
+	$effect(() => {
+		clearTimeout(customerDebounceTimer);
+		customerDebounceTimer = setTimeout(() => {
+			searchCustomers();
+		}, 300);
+	});
+
+	// --- Derived State สำหรับคำนวณยอดรวม ---
+	const subtotal = $derived(
+		cart.reduce((sum, item) => sum + Number(item.retailPrice) * item.quantity, 0)
+	);
+	const totalDiscount = $derived(
+		cart.reduce((sum, item) => sum + Number(item.discount || 0) * item.quantity, 0)
+	);
+	const grandTotal = $derived(subtotal - totalDiscount - billDiscount);
+
+	// --- Effect สำหรับนาฬิกาและโหลดบิลพัก ---
+	$effect(() => {
+		const timer = setInterval(() => {
+			const now = new Date();
+			currentDate = now.toLocaleDateString('th-TH', { dateStyle: 'long', calendar: 'buddhist' });
+			currentTime = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+		}, 1000);
+
+		async function fetchHeldBills() {
+			try {
+				const response = await fetch('/api/orders/hold');
+				if (response.ok) {
+					heldBillsCount = (await response.json()).length;
+				}
+			} catch (err) {
+				console.error('Failed to fetch held bills count:', err);
+			}
+		}
+		fetchHeldBills();
+		return () => clearInterval(timer);
+	});
+
+	// --- ฟังก์ชันจัดการต่างๆ ---
 	function selectCustomer(customer: Customer) {
 		selectedCustomer = customer;
 		customerSearchQuery = '';
@@ -116,9 +136,8 @@
 		if (existingItem) {
 			existingItem.quantity += quantity;
 		} else {
-			cart = [...cart, { ...product, quantity: quantity, discount: 0 }];
+			cart.push({ ...product, quantity, discount: 0 });
 		}
-		cart = [...cart]; // Trigger reactivity
 		productSearchQuery = '';
 		productSearchResults = [];
 		highlightedIndex = -1;
@@ -128,24 +147,12 @@
 		cart = cart.filter((item) => item.id !== productId);
 	}
 
-	function adjustQuantity(productId: number, amount: number) {
-		const item = cart.find((i) => i.id === productId);
-		if (item) {
-			const newQuantity = item.quantity + amount;
-			if (newQuantity > 0) {
-				item.quantity = newQuantity;
-				cart = [...cart];
-			} else {
-				removeFromCart(productId);
-			}
-		}
-	}
-
-	function updateQuantity(itemIndex: number, newQuantityStr: string) {
+	function updateQuantity(item: (typeof cart)[0], newQuantityStr: string) {
 		const newQuantity = parseInt(newQuantityStr) || 1;
 		if (newQuantity > 0) {
-			cart[itemIndex].quantity = newQuantity;
-			cart = [...cart];
+			item.quantity = newQuantity;
+		} else {
+			removeFromCart(item.id);
 		}
 	}
 
@@ -156,10 +163,11 @@
 			highlightedIndex = (highlightedIndex + 1) % productSearchResults.length;
 		} else if (event.key === 'ArrowUp') {
 			event.preventDefault();
-			highlightedIndex = (highlightedIndex - 1 + productSearchResults.length) % productSearchResults.length;
+			highlightedIndex =
+				(highlightedIndex - 1 + productSearchResults.length) % productSearchResults.length;
 		} else if (event.key === 'Enter') {
 			event.preventDefault();
-			if (highlightedIndex !== -1) {
+			if (highlightedIndex > -1) {
 				addToCart(productSearchResults[highlightedIndex]);
 			} else if (productSearchResults.length > 0) {
 				addToCart(productSearchResults[0]);
@@ -167,8 +175,15 @@
 		}
 	}
 
-	async function handleCheckout(event: CustomEvent<{ paymentType: 'COMPLETED' | 'CREDIT'; received: number; change: number }>) {
-		const { paymentType, received, change } = event.detail;
+	async function handleCheckout(
+		event: CustomEvent<{
+			paymentType: 'COMPLETED' | 'CREDIT';
+			received: number;
+			change: number;
+			notifyDispatch?: boolean;
+		}>
+	) {
+		const { paymentType, received, change, notifyDispatch = false } = event.detail;
 		if (cart.length === 0) return;
 		if (paymentType === 'CREDIT' && !selectedCustomer) {
 			alert('กรุณาเลือกสมาชิกก่อนทำการขายเชื่อ');
@@ -187,9 +202,9 @@
 				paymentType: paymentType,
 				received: received,
 				change: change,
-				heldBillIdToDelete: loadedHeldBillId
+				heldBillIdToDelete: loadedHeldBillId,
+				notifyDispatch: notifyDispatch
 			};
-
 			const response = await fetch('/api/orders', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -258,12 +273,9 @@
 				console.error('Failed to delete held bill on reset:', err);
 			}
 		}
-
 		cart = [];
 		productSearchQuery = '';
 		customerSearchQuery = '';
-		productSearchResults = [];
-		customerSearchResults = [];
 		selectedCustomer = null;
 		loadedHeldBillId = null;
 		highlightedIndex = -1;
@@ -274,7 +286,6 @@
 		if (loadedHeldBillId) {
 			resetSale();
 		}
-
 		selectedCustomer = order.customer;
 		cart = order.items.map((item) => ({
 			...item.product,
@@ -290,11 +301,6 @@
 		newOrderId = null;
 		resetSale();
 	}
-
-	// --- Computed Properties ---
-	$: subtotal = cart.reduce((sum, item) => sum + Number(item.retailPrice) * item.quantity, 0);
-	$: totalDiscount = cart.reduce((sum, item) => sum + Number(item.discount || 0) * item.quantity, 0);
-	$: grandTotal = subtotal - totalDiscount - (billDiscount || 0);
 </script>
 
 <div class="pos-grid" class:loading="{isLoading}">
@@ -306,31 +312,33 @@
 					<div class="customer-display">
 						<div class="customer-info-text">
 							<span
-								><strong>ชื่อ:</strong> {selectedCustomer.firstName} {selectedCustomer.lastName ||
-									''} ({selectedCustomer.phone || selectedCustomer.memberCode})</span
+								><strong>ชื่อ:</strong>
+								{selectedCustomer.firstName}
+								{selectedCustomer.lastName || ''} ({selectedCustomer.phone ||
+									selectedCustomer.memberCode})</span
 							>
 							{#if selectedCustomer.shippingAddress}
 								<div class="customer-address">
-									<strong>ที่อยู่:</strong> {selectedCustomer.shippingAddress}
+									<strong>ที่อยู่:</strong>
+									{selectedCustomer.shippingAddress}
 								</div>
 							{/if}
 						</div>
-						<button on:click="{clearSelectedCustomer}" class="contrast outline small-btn">X</button>
+						<button onclick={clearSelectedCustomer} class="contrast outline small-btn">X</button>
 					</div>
 				{:else}
 					<div class="customer-search-wrapper">
 						<input
 							type="search"
 							placeholder="ค้นหาสมาชิกจาก ชื่อ, เบอร์โทร, รหัส..."
-							bind:value="{customerSearchQuery}"
-							on:input="{handleCustomerSearchInput}"
+							bind:value={customerSearchQuery}
 						/>
 						{#if customerSearchResults.length > 0}
 							<div class="search-dropdown">
 								{#each customerSearchResults as customer (customer.id)}
-									<button class="customer-item" on:click="{() => selectCustomer(customer)}">
-										{customer.firstName} {customer.lastName ||
-											''} - {customer.phone || customer.memberCode}
+									<button class="customer-item" onclick={() => selectCustomer(customer)}>
+										{customer.firstName}
+										{customer.lastName || ''} - {customer.phone || customer.memberCode}
 									</button>
 								{/each}
 							</div>
@@ -345,18 +353,17 @@
 			<div class="product-search-bar">
 				<input
 					type="search"
-					placeholder="ค้นหาจากบาร์โค้ด/ชื่อสินค้า"
-					bind:value="{productSearchQuery}"
-					on:input="{handleProductSearchInput}"
-					on:keydown="{handleKeydown}"
+					placeholder="ค้นหาจากบาร์โค้ด/ชื่อสินค้า/ตัวย่อ"
+					bind:value={productSearchQuery}
+					onkeydown={handleKeydown}
 				/>
 				{#if productSearchResults.length > 0}
 					<div class="search-dropdown">
 						{#each productSearchResults as product, i (product.id)}
 							<button
 								class="product-item"
-								class:highlighted="{i === highlightedIndex}"
-								on:click="{() => addToCart(product)}"
+								class:highlighted={i === highlightedIndex}
+								onclick={() => addToCart(product)}
 							>
 								{product.name} - {Number(product.retailPrice).toFixed(2)} บาท
 							</button>
@@ -369,45 +376,59 @@
 				<table>
 					<thead>
 						<tr>
-							<th style="width: 5%;">ที่</th>
-							<th style="width: 50%;">ชื่อสินค้า</th>
-							<th style="width: 10%;">จำนวน</th>
-							<th style="width: 12%;">ราคา</th>
-							<th style="width: 11%;">ส่วนลด</th>
-							<th style="width: 12%;">รวม</th>
-							<th style="width: 5%;">ลบ</th>
+							<th class="col-no">ที่</th>
+							<th class="col-name">ชื่อสินค้า</th>
+							<th class="col-qty">จำนวน</th>
+							<th class="col-price">ราคา</th>
+							<th class="col-discount">ส่วนลด</th>
+							<th class="col-total">รวม</th>
+							<th class="col-delete">ลบ</th>
 						</tr>
 					</thead>
 					<tbody>
 						{#if cart.length === 0}
 							<tr><td colspan="7" class="empty-row">-- เพิ่มสินค้าเพื่อเริ่มการขาย --</td></tr>
 						{:else}
-							{#each cart as item, i (item.id)}
+							{#each cart as item (item.id)}
 								<tr>
-									<td class="td-center">{i + 1}</td>
-									<td>{item.name}</td>
-									<td class="td-center">
-										<div class="quantity-control">
-											<input
-												type="number"
-												class="quantity-input"
-												value="{item.quantity}"
-												min="1"
-												on:input="{(e) => updateQuantity(i, e.currentTarget.value)}"
-											/>
-											<div class="spinner-buttons">
-												<button on:click="{() => adjustQuantity(item.id, 1)}" class="outline secondary small-btn spinner-up">▲</button>
-												<button on:click="{() => adjustQuantity(item.id, -1)}" class="outline secondary small-btn spinner-down">▼</button>
-											</div>
-										</div>
+									<td class="col-no">{cart.indexOf(item) + 1}</td>
+									<td class="col-name">{item.name}</td>
+									<td class="col-qty">
+										<input
+											type="number"
+											class="table-input"
+											value={item.quantity}
+											min="1"
+											oninput={(e) => updateQuantity(item, e.currentTarget.value)}
+										/>
 									</td>
-									<td class="td-center">
-										<input type="number" step="0.01" bind:value={item.retailPrice} class="price-input" />
+									<td class="col-price">
+										<input
+											type="number"
+											step="0.01"
+											bind:value={item.retailPrice}
+											class="table-input"
+										/>
 									</td>
-									<td class="td-center"><input type="number" bind:value="{item.discount}" min="0" class="discount-input" /></td>
-									<td class="td-right">{((Number(item.retailPrice) - Number(item.discount || 0)) * item.quantity).toFixed(2)}</td>
-									<td class="td-center">
-										<button on:click="{() => removeFromCart(item.id)}" class="contrast outline small-btn">X</button>
+									<td class="col-discount">
+										<input
+											type="number"
+											bind:value={item.discount}
+											min="0"
+											class="table-input"
+										/>
+									</td>
+									<td class="col-total">
+										{(
+											(Number(item.retailPrice) - Number(item.discount || 0)) *
+											item.quantity
+										).toFixed(2)}
+									</td>
+									<td class="col-delete">
+										<button
+											onclick={() => removeFromCart(item.id)}
+											class="contrast outline small-btn">X</button
+										>
 									</td>
 								</tr>
 							{/each}
@@ -425,30 +446,35 @@
 					<strong class="date">{currentDate || '...'}</strong>
 					<span class="time">{currentTime || '...'}</span>
 				</div>
-				<button class="secondary outline" on:click="{() => (showHeldBillsModal = true)}">
+				<button class="secondary outline" onclick={() => (showHeldBillsModal = true)}>
 					{heldBillsCount} รายการพักบิล
 				</button>
 			</header>
-
 			<div class="price-summary">
 				<span>ราคา</span><input type="text" value="฿{subtotal.toFixed(2)}" readonly />
 				<span>ภาษี</span><input type="text" value="฿0.00" readonly />
 				<span>ส่วนลด</span><input type="text" value="฿{totalDiscount.toFixed(2)}" readonly />
 				<label for="billDiscount">ท้ายบิล</label>
-				<input type="number" id="billDiscount" placeholder="0.00" bind:value="{billDiscount}" min="0" />
-				<span class="total-label">รวม</span>
-				<input type="text" class="total-input" value="฿{grandTotal.toFixed(2)}" readonly />
+				<input type="number" id="billDiscount" placeholder="0.00" bind:value={billDiscount} min="0" />
+				<span class="total-label">รวม</span><input
+					type="text"
+					class="total-input"
+					value="฿{grandTotal.toFixed(2)}"
+					readonly
+				/>
 			</div>
-
 			<footer class="summary-footer">
 				<button
-					class="checkout-btn main-action-btn"
-					disabled="{cart.length === 0}"
-					on:click="{() => (showPaymentModal = true)}">คิดเงิน</button
+					class="main-action-btn"
+					disabled={cart.length === 0}
+					onclick={() => (showPaymentModal = true)}>คิดเงิน</button
 				>
+
 				<div class="sub-footer-buttons">
-					<button class="secondary" on:click="{handleHoldBill}" disabled="{cart.length === 0}">พักบิล</button>
-					<button class="danger-solid" on:click="{resetSale}">ยกเลิก</button>
+					<button class="secondary" onclick={handleHoldBill} disabled={cart.length === 0}
+						>พักบิล</button
+					>
+					<button class="danger-solid" onclick={resetSale}>ยกเลิก</button>
 				</div>
 			</footer>
 		</article>
@@ -456,299 +482,243 @@
 </div>
 
 <PaymentModal
-	bind:showModal="{showPaymentModal}"
-	totalAmount="{grandTotal}"
-	on:confirm="{handleCheckout}"
-	on:close="{() => (showPaymentModal = false)}"
+	bind:showModal={showPaymentModal}
+	totalAmount={grandTotal}
+	onconfirm={handleCheckout}
+	onclose={() => (showPaymentModal = false)}
+	customerId={selectedCustomer?.id}
 />
 <HeldBillsModal
-	bind:showModal="{showHeldBillsModal}"
-	on:select="{(event) => loadHeldBill(event.detail)}"
-	on:close="{() => (showHeldBillsModal = false)}"
+	bind:showModal={showHeldBillsModal}
+	onselect={(event) => loadHeldBill(event.detail)}
+	onclose={() => (showHeldBillsModal = false)}
 />
-
-<SaleSuccessModal 
-    bind:showModal={showSaleSuccessModal}
-    newOrderId={newOrderId}
-    on:closeAndReset={closeSuccessModalAndReset}
+<SaleSuccessModal
+	bind:showModal={showSaleSuccessModal}
+	newOrderId={newOrderId}
+	oncloseAndReset={closeSuccessModalAndReset}
 />
 
 <style>
-:root {
-	--main-green: #28e132;
-	--main-green-hover: #22c52a;
-	--text-color-on-main: #ffffff;
-	--danger-red: #f44336;
-	--danger-red-hover: #d32f2f;
-}
+	.summary-footer {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		margin-top: 1.5rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid #d1d5db;
+	}
+	.search-dropdown {
+		position: absolute;
+		width: 100%;
+		background: white;
+		color: #212529;
+		border: 1px solid var(--pico-form-element-border-color, #d1d5db);
+		border-radius: var(--pico-border-radius, 8px);
+		margin-top: 0.25rem;
+		z-index: 100;
+		max-height: 250px;
+		overflow-y: auto;
+		box-shadow: var(--pico-box-shadow, 0 2px 8px rgba(0, 0, 0, 0.1));
+		display: block;
+	}
+	.product-item,
+	.customer-item {
+		display: block;
+		width: 100%;
+		text-align: left;
+		padding: 0.75rem 1rem;
+		border: none;
+		background: transparent;
+		border-bottom: 1px solid var(--pico-card-border-color, #e9ecef);
+		cursor: pointer;
+		white-space: normal;
+		color: #212529;
+	}
+	.product-item:last-child,
+	.customer-item:last-child {
+		border-bottom: none;
+	}
+	.product-item:hover,
+	.product-item.highlighted,
+	.customer-item:hover {
+		background-color: var(--pico-primary-background);
+		color: var(--pico-primary-inverse);
+	}
+	.pos-grid {
+		display: grid;
+		grid-template-columns: 1fr 370px;
+		gap: 1rem;
+		align-items: flex-start;
+	}
+	.main-panel {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+	.summary-panel {
+		position: sticky;
+		top: 1.5rem;
+		min-width: 320px;
+		max-width: 370px;
+		height: fit-content;
+		z-index: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 1.2rem;
+	}
+	.summary-card {
+		background: #f8fafc;
+		border-radius: 10px;
+		box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+		padding: 1.4rem 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+	.summary-header {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 1.5rem;
+		padding-bottom: 1rem;
+		border-bottom: 1px solid #d1d5db;
+	}
+	.date-time-section {
+		text-align: center;
+	}
+	.date {
+		font-size: 1.1em;
+		font-weight: 600;
+	}
+	.time {
+		font-size: 1em;
+		color: #6c757d;
+	}
+	.secondary.outline {
+		background: #fff;
+		color: #2176ff;
+		border: 1px solid #2176ff;
+		padding: 0.5rem 0.75rem;
+		border-radius: 6px;
+		cursor: pointer;
+		transition: background-color 0.15s;
+	}
+	.secondary.outline:hover {
+		background-color: #e0ebff;
+	}
 
-/* --- Main Action Button Styles --- */
-.main-action-btn {
-	--pico-background-color: var(--main-green);
-	--pico-border-color: var(--main-green);
-	--pico-color: var(--text-color-on-main);
-}
-.main-action-btn:hover,
-.main-action-btn:active,
-.main-action-btn:focus {
-	--pico-background-color: var(--main-green-hover);
-	--pico-border-color: var(--main-green-hover);
-}
-/* --- Danger Red Button Styles --- */
-.danger-solid {
-	--pico-background-color: var(--danger-red);
-	--pico-border-color: var(--danger-red);
-	--pico-color: var(--text-color-on-main);
-}
-.danger-solid:hover,
-.danger-solid:active,
-.danger-solid:focus {
-	--pico-background-color: var(--danger-red-hover);
-	--pico-border-color: var(--danger-red-hover);
-}
+	.price-summary {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.7rem;
+		align-items: center;
+	}
+	.price-summary input {
+		text-align: right;
+	}
+	.main-action-btn {
+		background: #28a745;
+		border: 1px solid #28a745;
+		color: #fff;
+		border-radius: 6px;
+		padding: 0.8rem;
+		font-size: 1.07em;
+		font-weight: 600;
+		cursor: pointer;
+		width: 100%;
+		transition: background 0.2s;
+	}
+	.main-action-btn:hover {
+		background: #218838;
+	}
 
-/* --- Layout & General Card Styles --- */
-.pos-grid {
-	display: grid;
-	grid-template-columns: 1fr 380px;
-	gap: 1rem;
-	align-items: start;
-}
-.main-panel,
-.summary-panel {
-	display: flex;
-	flex-direction: column;
-	gap: 1rem;
-}
-.summary-card {
-	position: sticky;
-	top: 1rem;
-}
-.customer-search-wrapper,
-.product-search-bar {
-	position: relative;
-}
-.search-dropdown {
-	position: absolute;
-	width: 100%;
-	background: var(--pico-card-background-color);
-	border: 1px solid var(--pico-form-element-border-color);
-	border-radius: var(--pico-border-radius);
-	margin-top: 0.25rem;
-	z-index: 100;
-	max-height: 250px;
-	overflow-y: auto;
-	box-shadow: var(--pico-box-shadow);
-}
-.customer-item,
-.product-item {
-	display: block;
-	width: 100%;
-	text-align: left;
-	padding: 0.75rem 1rem;
-	border: none;
-	background-color: white;
-	color: black;
-	border-bottom: 1px solid var(--pico-card-border-color);
-	cursor: pointer;
-}
-.customer-item:last-child,
-.product-item:last-child {
-	border-bottom: none;
-}
-.customer-item:hover,
-.product-item:hover,
-.product-item.highlighted {
-	background-color: var(--pico-primary-background);
-	color: white;
-}
-.customer-info-text {
-	flex-grow: 1;
-	margin-right: 1rem;
-}
-.customer-address {
-	margin-top: 0.5rem;
-	font-size: 0.9em;
-	color: var(--pico-muted-color);
-	white-space: pre-wrap;
-}
-.customer-display {
-	display: flex;
-	justify-content: space-between;
-	align-items: flex-start;
-	background-color: var(--pico-muted-background-color);
-	padding: 0.75rem 1rem;
-	border-radius: var(--pico-border-radius);
-}
-
-/* --- Table Styles --- */
-.table-container {
-	max-height: 45vh;
-	overflow-y: auto;
-	margin-top: 1.5rem;
-}
-table {
-	margin-bottom: 0;
-	table-layout: fixed;
-	width: 100%;
-}
-thead th,
-tbody td {
-	text-align: center !important;
-	vertical-align: middle !important;
-}
-
-/* --- ช่องชื่อสินค้า: ชิดซ้ายแต่เว้นขอบ --- */
-.table-container th:nth-child(2),
-.table-container td:nth-child(2) {
-	text-align: left !important;
-	padding-left: 18px !important;
-}
-
-/* ช่องอื่น ๆ เช่น .td-center, .td-right ให้ตรงกลางหมด */
-.td-center, .td-right {
-	text-align: center !important;
-}
-
-.table-container tr {
-	height: 42px;
-}
-.empty-row {
-	text-align: center;
-	padding: 2rem;
-	color: var(--pico-muted-color);
-}
-
-/* --- Input & Quantity Control Styles --- */
-/* Input ของจำนวน, ราคา, ส่วนลด สูงขึ้น, ขนาดเท่ากัน, ตัวเลขกลางแนวตั้ง */
-.quantity-input,
-.price-input,
-.discount-input {
-	width: 1200px;
-	min-width: 70px;
-	max-width: 200px;
-	height: 40px;
-	padding: 0 .5rem;
-	font-size: 1em;
-	text-align: center;
-	box-sizing: border-box;
-	display: inline-block;
-	margin: 0 auto;
-	line-height: 38px;
-}
-
-/* กล่องควบคุมจำนวนสูงขึ้น */
-.quantity-control {
-	display: inline-flex;
-	align-items: center;
-	border: 1px solid var(--pico-form-element-border-color);
-	border-radius: var(--pico-border-radius);
-	max-width: 150px;
-	width: 90px;
-	min-width: 70px;
-	height: 38px;
-	margin: 0 auto;
-	overflow: hidden;
-}
-
-/* Spinner ตั้งความสูงให้ปุ่มเท่ากับ input */
-.spinner-buttons {
-	display: flex;
-	flex-direction: column;
-	width: 24px;
-	min-width: 24px;
-	max-width: 24px;
-	height: 38px;
-}
-.spinner-buttons button {
-	padding: 0;
-	line-height: 1;
-	height: 19px;
-	border-radius: 0;
-	border: none;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-size: 0.7em;
-	background-color: var(--pico-secondary-background-color);
-	color: var(--pico-secondary-color);
-}
-.spinner-buttons button:hover {
-	background-color: var(--pico-secondary-hover-background-color);
-}
-.spinner-buttons .spinner-up {
-	border-bottom: 1px solid var(--pico-form-element-border-color);
-}
-.small-btn {
-	padding: 0.25rem 0.5rem;
-	line-height: 1;
-}
-
-/* --- Summary Panel Styles --- */
-.price-input, .discount-input {
-	width: 110px;
-	min-width: 70px;
-	max-width: 150px;
-	text-align: center;
-}
-.total-label {
-	font-weight: bold;
-	font-size: 1.1em;
-}
-.total-input {
-	font-weight: bold;
-	font-size: 1.2em;
-	color: var(--pico-primary);
-}
-.summary-footer {
-	margin-top: 1rem;
-}
-.checkout-btn {
-	width: 100%;
-	padding: 0.75rem;
-	font-size: 1.1em;
-}
-.sub-footer-buttons {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 0.5rem;
-	margin-top: 0.5rem;
-}
-.summary-header {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 0.75rem;
-	margin-bottom: 1.5rem;
-	padding-bottom: 1rem;
-	border-bottom: 1px solid var(--pico-muted-border-color);
-}
-.date-time-section {
-	text-align: center;
-}
-.date {
-	font-size: 1.1em;
-	font-weight: 600;
-}
-.time {
-	font-size: 1em;
-	color: var(--pico-muted-color);
-}
-.summary-header button {
-	width: 100%;
-}
-.price-summary {
-	width: 100px
-	display: grid;
-	grid-template-columns: auto 1fr;
-	gap: 0.75rem;
-	align-items: center;
-}
-.price-summary input {
-	text-align: right;
-	border-radius: 20px;
-	padding: 0.5rem 1rem;
-}
-
-
+	.danger-solid {
+		background: #dc3545;
+		border: 1px solid #dc3545;
+		color: #fff;
+		border-radius: 6px;
+		padding: 0.75rem;
+		font-size: 1em;
+		font-weight: 600;
+		cursor: pointer;
+		width: 100%;
+		transition: background 0.2s;
+	}
+	.danger-solid:hover {
+		background: #c82333;
+	}
+	.sub-footer-buttons {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.6rem;
+		margin-top: 0.5rem;
+	}
+	.table-container {
+		max-height: 45vh;
+		overflow-y: auto;
+		margin-top: 1.5rem;
+	}
+	table {
+		table-layout: fixed;
+		width: 100%;
+		border-collapse: separate;
+		border-spacing: 0;
+	}
+	thead th,
+	tbody td {
+		vertical-align: middle;
+		padding: 0.35rem 0.5rem;
+	}
+	.col-no {
+		width: 5%;
+		text-align: center;
+	}
+	.col-name {
+		width: 55%;
+		text-align: left;
+	}
+	.col-qty {
+		width: 7%;
+		text-align: center;
+	}
+	.col-price {
+		width: 8%;
+		text-align: center;
+	}
+	.col-discount {
+		width: 8%;
+		text-align: center;
+	}
+	.col-total {
+		width: 12%;
+		text-align: right;
+	}
+	.col-delete {
+		width: 5%;
+		text-align: center;
+	}
+	.table-input {
+		width: 100%;
+		height: 2em;
+		padding: 0 0.5rem;
+		font-size: 1em;
+		text-align: center;
+		vertical-align: middle;
+		box-sizing: border-box;
+		border-radius: var(--pico-border-radius, 6px);
+		border: 1px solid var(--pico-form-element-border-color, #d1d5db);
+		margin: 0;
+		background: #fff;
+	}
+	.empty-row {
+		text-align: center;
+		padding: 2rem;
+		color: #8c98a4;
+	}
+	.small-btn {
+		padding: 0.25rem 0.5rem;
+		line-height: 1;
+	}
 </style>

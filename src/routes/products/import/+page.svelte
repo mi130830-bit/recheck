@@ -1,8 +1,13 @@
-<!-- Path: src/routes/products/import/+page.svelte (Final Updated Version) -->
+<!-- src/routes/products/import/+page.svelte (ปรับปรุงสำหรับ Svelte 5) -->
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	export let form;
-	let isLoading = false;
+	import type { ActionData } from './$types';
+
+	// [แก้ไข] 1. ใช้ $props() เพื่อรับ form prop
+	let { form } = $props<ActionData>();
+
+	// [ปรับปรุง] 2. ใช้ $state สำหรับจัดการ State ที่เปลี่ยนแปลงใน UI
+	let isLoading = $state(false);
 </script>
 
 <svelte:head>
@@ -16,16 +21,16 @@
 		<header><strong>ขั้นตอนการนำเข้า</strong></header>
 		<ol>
 			<li>
-				ดาวน์โหลดเทมเพลตไฟล์ Excel <a href="/template.xlsx" download>ที่นี่</a>
+				ดาวน์โหลดเทมเพลตไฟล์ Excel <a href="/template-products.xlsx" download>ที่นี่</a>
 			</li>
-			<li>กรอกข้อมูลสินค้าลงในไฟล์ Excel **โดยระบุชื่อ "ผู้ขายสินค้า" ที่มีอยู่แล้วในระบบ**</li>
+			<li>กรอกข้อมูลสินค้าลงในไฟล์ Excel (คอลัมน์ "ชื่อผู้ขาย" ต้องตรงกับชื่อที่มีอยู่แล้วในระบบ)</li>
 			<li>เลือกไฟล์ Excel ของคุณและกดปุ่ม "นำเข้าข้อมูล"</li>
 		</ol>
+		<p><strong>ข้อควรระวัง:</strong> สินค้าที่มี "รหัสบาร์โค้ด" ซ้ำกับที่มีอยู่แล้วในระบบจะถูกข้ามไป</p>
 	</article>
 
 	{#if form?.message}
 		<aside class:invalid={!form?.success} class:valid={form?.success}>
-			<!-- ใช้ <pre> เพื่อให้แสดงผลข้อความหลายบรรทัดได้ถูกต้อง -->
 			<pre>{form.message}</pre>
 		</aside>
 	{/if}
@@ -34,14 +39,13 @@
 		method="POST"
 		enctype="multipart/form-data"
 		use:enhance={() => {
-			isLoading = true;
+			isLoading = true; // เริ่ม loading
 			return async ({ update }) => {
-				await update();
-				isLoading = false;
+				await update(); // รอให้ SvelteKit อัปเดต form prop
+				isLoading = false; // หยุด loading
 			};
 		}}
 	>
-		<!-- [ลบออก] เอา Dropdown เลือกผู้ขายออกไป -->
 		<label for="excelFile">
 			เลือกไฟล์ Excel (.xlsx)
 			<input type="file" id="excelFile" name="excelFile" accept=".xlsx" required />
@@ -63,7 +67,8 @@
 		margin-bottom: 1rem;
 		border-radius: var(--pico-border-radius);
 		border-left-width: 4px;
-		white-space: pre-wrap; /* ทำให้ <pre> ตัดคำได้ */
+		white-space: pre-wrap; /* ทำให้ <pre> ตัดคำและขึ้นบรรทัดใหม่ได้ */
+		word-break: break-word;
 	}
 	aside.invalid {
 		background-color: var(--pico-form-element-invalid-background-color);

@@ -1,11 +1,15 @@
+<!-- src/routes/customers/[id]/history/+page.svelte (ปรับปรุงสำหรับ Svelte 5) -->
 <script lang="ts">
 	import type { PageData } from './$types';
-	export let data: PageData;
-	
-	// รับข้อมูล customer และ orders จาก data ที่ส่งมาจาก server
-	const { customer, orders } = data;
 
-	// ฟังก์ชันสำหรับจัดรูปแบบวันที่
+	// [แก้ไข] 1. ใช้ $props() เพื่อรับ data prop
+	let { data } = $props<PageData>();
+
+	// [ปรับปรุง] 2. ใช้ $derived เพื่อให้ตัวแปร update อัตโนมัติเมื่อ data เปลี่ยน
+	let customer = $derived(data.customer);
+	let orders = $derived(data.orders);
+
+	// --- Functions (ไม่มีการเปลี่ยนแปลง) ---
 	function formatDate(dateString: Date) {
 		return new Date(dateString).toLocaleDateString('th-TH', {
 			year: 'numeric',
@@ -14,7 +18,6 @@
 		});
 	}
 
-	// ฟังก์ชันสำหรับสถานะบิล
 	function formatStatus(status: string) {
 		switch (status) {
 			case 'COMPLETED':
@@ -87,6 +90,7 @@
 	</article>
 </main>
 
+<!-- สไตล์ยังคงเดิม เนื่องจากออกแบบมาได้ดีแล้ว -->
 <style>
 	.container {
 		max-width: 1100px;

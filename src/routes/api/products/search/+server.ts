@@ -1,42 +1,32 @@
-// Path: src/routes/api/products/search/+server.ts (ฉบับสมบูรณ์)
-
 import { db } from '$lib/server/db';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url }) => {
-	// 1. รับคำค้นหา (q) จาก URL
-	const query = url.searchParams.get('q');
+	const query = url.searchParams.get('q')?.trim();
 
-	// ถ้าไม่มีคำค้นหา ส่งค่าว่างกลับไป
-	if (!query || query.trim() === '') {
+	if (!query || query.length < 2) {
 		return json([]);
 	}
 
 	try {
-		const products = await db.product.findMany({
+		const productsFromDb = await db.product.findMany({
 			where: {
-				// เงื่อนไขคือ ต้องเป็นจริงทั้งหมด (AND)
-				AND: [
-					{
-						// 2. ค้นหาเฉพาะสินค้าที่ยังมีในสต็อก (มากกว่า 0)
-						stockQuantity: {
-							gt: 0
-						}
-					},
-					{
-						// 3. และคำค้นหาต้องตรงกับเงื่อนไขใดเงื่อนไขหนึ่ง (OR) ต่อไปนี้
-						OR: [
-							{ name: { contains: query } },      // ค้นจากชื่อสินค้า
-							{ barcode: { contains: query } },   // ค้นจากบาร์โค้ด
-							{ alias: { contains: query } }      // ค้นจากชื่อย่อ/รหัส
-						]
-					}
+				OR: [
+            		{ name: { contains: query, mode: 'insensitive' } },
+            		{ barcode: { contains: query, mode: 'insensitive' } },
+            		{ alias: { contains: query, mode: 'insensitive' } }
 				]
 			},
-			// 4. แสดงผลลัพธ์สูงสุด 20 รายการ
 			take: 20
 		});
+		
+		const products = productsFromDb.map((p) => ({
+			...p,
+			costPrice: p.costPrice.toNumber(),
+			retailPrice: p.retailPrice.toNumber(),
+			wholesalePrice: p.wholesalePrice ? p.wholesalePrice.toNumber() : null
+		}));
 		
 		return json(products);
 

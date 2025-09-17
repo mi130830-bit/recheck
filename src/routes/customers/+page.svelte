@@ -1,30 +1,32 @@
-<!-- Path: src/routes/customers/+page.svelte (เพิ่มปุ่มประวัติ) -->
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import type { PageData, ActionData } from './$types';
 
-	export let data: PageData;
-	export let form: ActionData;
+	// ✅ FIX: รับ props ด้วย $props()
+	let { data, form } = $props<{ data: PageData; form: ActionData }>();
 
-	$: ({ customers, totalItems, currentPage, totalPages, query } = data);
-	let searchQuery = data.query ?? '';
-	let debounceTimer: NodeJS.Timeout;
+	// ✅ FIX: ใช้ $state สำหรับ input และ $effect สำหรับ debounce
+	let searchQuery = $state(data.query ?? '');
 
-	function handleSearchInput() {
-		clearTimeout(debounceTimer);
-		debounceTimer = setTimeout(() => {
-			const params = new URLSearchParams($page.url.searchParams.toString());
-			params.set('query', searchQuery);
-			params.set('page', '1');
-			goto(`?${params.toString()}`, {
-				keepFocus: true,
-				noScroll: true,
-				replaceState: true
-			});
+	$effect(() => {
+		const debounceTimer = setTimeout(() => {
+			const currentQueryInUrl = $page.url.searchParams.get('query') ?? '';
+			if (searchQuery !== currentQueryInUrl) {
+				const params = new URLSearchParams($page.url.searchParams.toString());
+				params.set('query', searchQuery);
+				params.set('page', '1');
+				goto(`?${params.toString()}`, {
+					keepFocus: true,
+					noScroll: true,
+					replaceState: true
+				});
+			}
 		}, 300);
-	}
+
+		return () => clearTimeout(debounceTimer);
+	});
 </script>
 
 <main class="container">
@@ -32,19 +34,7 @@
 		<h1>จัดการข้อมูลสมาชิก</h1>
 		<div class="button-group">
 			<a href="/customers/import" role="button" class="excel-btn">
-				<svg
-					width="18"
-					height="18"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-				>
-					<rect x="3" y="3" width="18" height="18" rx="2" />
-					<text x="7" y="16" font-size="7" font-family="Arial">XLS</text>
-				</svg>
+				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect x="3" y="3" width="18" height="18" rx="2" /> <text x="7" y="16" font-size="7" font-family="Arial">XLS</text> </svg>
 				นำเข้าจาก Excel
 			</a>
 			<a href="/customers/new" role="button" class="add-btn"> + เพิ่มสมาชิกใหม่ </a>
@@ -57,7 +47,6 @@
 			name="query"
 			placeholder="พิมพ์เพื่อค้นหาจากรหัส, ชื่อ, หรือเบอร์โทร..."
 			bind:value={searchQuery}
-			on:input={handleSearchInput}
 			class="search-input"
 			aria-label="ค้นหาข้อมูลสมาชิก"
 		/>
@@ -67,7 +56,7 @@
 		<aside class="error-message"><p>{form.message}</p></aside>
 	{/if}
 
-	{#if customers.length === 0}
+	{#if data.customers.length === 0}
 		<article><p>ไม่พบข้อมูลสมาชิกที่ตรงกับเงื่อนไข</p></article>
 	{:else}
 		<div style="overflow-x: auto;">
@@ -78,13 +67,11 @@
 						<th>ชื่อ - นามสกุล</th>
 						<th>โทรศัพท์</th>
 						<th>อีเมล</th>
-						<!-- START: แก้ไขความกว้างคอลัมน์ -->
 						<th style="width: 180px;">การกระทำ</th>
-						<!-- END: แก้ไขความกว้างคอลัมน์ -->
 					</tr>
 				</thead>
 				<tbody>
-					{#each customers as customer (customer.id)}
+					{#each data.customers as customer (customer.id)}
 						<tr>
 							<td><strong>{customer.memberCode}</strong></td>
 							<td>{customer?.firstName} {customer?.lastName || ''}</td>
@@ -92,86 +79,16 @@
 							<td>{customer.email || '-'}</td>
 							<td>
 								<div class="action-buttons">
-									<a
-										href="/customers/{customer.id}/edit"
-										role="button"
-										class="outline mint-outline"
-										title="แก้ไข"
-										aria-label="แก้ไข"
-									>
-										<svg
-											width="16"
-											height="16"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-										>
-											<path d="M12 20h9" />
-											<path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-										</svg>
+									<a href="/customers/{customer.id}/edit" role="button" class="outline mint-outline" title="แก้ไข" aria-label="แก้ไข" >
+										<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 20h9" /> <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /> </svg>
 									</a>
-
-									<!-- START: เพิ่มปุ่ม "..." สำหรับดูประวัติ -->
-									<a
-										href="/customers/{customer.id}/history"
-										role="button"
-										class="secondary outline"
-										title="ดูประวัติการซื้อ"
-										aria-label="ดูประวัติการซื้อ"
-									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											width="16"
-											height="16"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-										>
-											<circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle
-												cx="5"
-												cy="12"
-												r="1"
-											/>
-										</svg>
+									<a href="/customers/{customer.id}/history" role="button" class="secondary outline" title="ดูประวัติการซื้อ" aria-label="ดูประวัติการซื้อ" >
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /> </svg>
 									</a>
-									<!-- END: เพิ่มปุ่ม "..." สำหรับดูประวัติ -->
-
 									<form method="POST" action="?/delete" use:enhance>
 										<input type="hidden" name="id" value={customer.id} />
-										<button
-											type="submit"
-											class="outline danger-outline"
-											title="ลบ"
-											aria-label="ลบ"
-											on:click={(event) => {
-												if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบ "${customer?.firstName}"?`)) {
-													event.preventDefault();
-												}
-											}}
-										>
-											<svg
-												width="16"
-												height="16"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-											>
-												<polyline points="3 6 5 6 21 6" />
-												<path
-													d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-												/>
-												<line x1="10" y1="11" x2="10" y2="17" />
-												<line x1="14" y1="11" x2="14" y2="17" />
-											</svg>
+										<button type="submit" class="outline danger-outline" title="ลบ" aria-label="ลบ" on:click={(event) => { if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบ "${customer?.firstName}"?`)) { event.preventDefault(); } }} >
+											<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <polyline points="3 6 5 6 21 6" /> <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /> <line x1="10" y1="11" x2="10" y2="17" /> <line x1="14" y1="11" x2="14" y2="17" /> </svg>
 										</button>
 									</form>
 								</div>
@@ -182,24 +99,12 @@
 			</table>
 		</div>
 
-		{#if totalPages > 1}
+		{#if data.totalPages > 1}
 			<nav class="pagination">
 				<ul>
-					<li>
-						<a
-							href="?query={searchQuery}&page={currentPage - 1}"
-							aria-label="Previous"
-							class:disabled={currentPage <= 1}>&laquo; ก่อนหน้า</a
-						>
-					</li>
-					<li><span>หน้า {currentPage} / {totalPages}</span></li>
-					<li>
-						<a
-							href="?query={searchQuery}&page={currentPage + 1}"
-							aria-label="Next"
-							class:disabled={currentPage >= totalPages}>ถัดไป &raquo;</a
-						>
-					</li>
+					<li> <a href="?query={data.query}&page={data.currentPage - 1}" aria-label="Previous" class:disabled={data.currentPage <= 1}>&laquo; ก่อนหน้า</a> </li>
+					<li><span>หน้า {data.currentPage} / {data.totalPages}</span></li>
+					<li> <a href="?query={data.query}&page={data.currentPage + 1}" aria-label="Next" class:disabled={data.currentPage >= data.totalPages}>ถัดไป &raquo;</a> </li>
 				</ul>
 			</nav>
 		{/if}

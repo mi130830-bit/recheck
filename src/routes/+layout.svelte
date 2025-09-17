@@ -4,9 +4,11 @@
 	//import '@picocss/pico';
 	// ✅ FIX: Layout ใช้ 'LayoutData' ไม่ใช่ 'PageData'
 	import type { LayoutData } from './$types';
+	import "../app.pcss";
+
 
 	// ✅ FIX: กำหนด Type ที่ถูกต้องให้กับ data prop
-	export let data: LayoutData;
+	let { data } = $props<LayoutData>();
 </script>
 
 <svelte:head>

@@ -1,56 +1,62 @@
-// Path: src/routes/products/+page.server.ts (Final Corrected Version)
+// src/routes/products/+page.server.ts (ฉบับปรับปรุงประสิทธิภาพ)
 
 import { db } from '$lib/server/db';
-import { fail, type Actions } from '@sveltejs/kit';
+import { fail, error, type Actions } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
-// ส่วนของ `load` function เหมือนเดิม ไม่มีการเปลี่ยนแปลง
 export const load: PageServerLoad = async ({ url }) => {
-	const page = Number(url.searchParams.get('page') ?? '1');
-	const limit = 25;
-	const query = url.searchParams.get('query') ?? '';
-	const whereCondition = query
-		? {
-				OR: [
-					{ name: { contains: query } },
-					{ alias: { contains: query } },
-					{ barcode: { contains: query } }
-				]
-			}
-		: {};
+	try {
+		const page = Number(url.searchParams.get('page') ?? '1');
+		const limit = 25;
+		const query = url.searchParams.get('query') ?? '';
 
-	const [productsFromDb, totalItems, suppliers, categories, units] = await db.$transaction([
-		db.product.findMany({
-			where: whereCondition,
-			skip: (page - 1) * limit,
-			take: limit,
-			orderBy: { createdAt: 'desc' },
-			include: { supplier: true, category: true, unit: true }
-		}),
-		db.product.count({ where: whereCondition }),
-		db.supplier.findMany({ orderBy: { name: 'asc' } }),
-		db.category.findMany({ orderBy: { name: 'asc' } }),
-		db.unit.findMany({ orderBy: { name: 'asc' } })
-	]);
+		const whereCondition = query
+			? {
+					OR: [
+						{ name: { contains: query, mode: 'insensitive' } },
+						{ alias: { contains: query, mode: 'insensitive' } },
+						{ barcode: { contains: query, mode: 'insensitive' } }
+					]
+				}
+			: {};
 
-	const products = productsFromDb.map((p) => ({
-		...p,
-		costPrice: p.costPrice.toNumber(),
-		retailPrice: p.retailPrice.toNumber(),
-		wholesalePrice: p.wholesalePrice ? p.wholesalePrice.toNumber() : null
-	}));
+		// [ปรับปรุง] ดึงเฉพาะข้อมูลที่ต้องใช้ในหน้านี้จริงๆ
+		const [productsFromDb, totalItems] = await db.$transaction([
+			db.product.findMany({
+				where: whereCondition,
+				skip: (page - 1) * limit,
+				take: limit,
+				orderBy: { createdAt: 'desc' }
+				// ไม่จำเป็นต้อง include ความสัมพันธ์ ถ้าไม่ได้ใช้ในตาราง List
+				// แต่ถ้าใช้ เช่น แสดงชื่อ supplier ก็คง include ไว้
+				// include: { supplier: true, category: true, unit: true }
+			}),
+			db.product.count({ where: whereCondition })
+		]);
 
-	return {
-		products,
-		totalItems,
-		currentPage: page,
-		totalPages: Math.ceil(totalItems / limit),
-		query,
-		limit,
-		suppliers,
-		categories,
-		units
-	};
+		const products = productsFromDb.map((p) => ({
+			...p,
+			costPrice: p.costPrice ? p.costPrice.toNumber() : 0,
+			retailPrice: p.retailPrice ? p.retailPrice.toNumber() : 0,
+			wholesalePrice: p.wholesalePrice ? p.wholesalePrice.toNumber() : null
+		}));
+
+		return {
+			products,
+			totalItems,
+			currentPage: page,
+			totalPages: Math.ceil(totalItems / limit),
+			query,
+			limit
+			// [ปรับปรุง] นำข้อมูลที่ไม่ใช้ออกไป
+			// suppliers,
+			// categories,
+			// units
+		};
+	} catch (err) {
+		console.error('Failed to load products page data:', err);
+		throw error(500, 'ไม่สามารถโหลดข้อมูลหน้าสินค้าได้');
+	}
 };
 
 export const actions: Actions = {
@@ -63,15 +69,15 @@ export const actions: Actions = {
 		}
 
 		try {
-			// [แก้ไข] แปลง id จาก string เป็น number ก่อนส่งให้ Prisma
 			await db.product.delete({
 				where: { id: parseInt(id) }
 			});
-			return { success: true };
-		} catch (error) {
-			console.error('Failed to delete product:', error);
-			// หากสินค้าถูกใช้ใน transaction อื่น อาจลบไม่ได้ Prisma จะโยน error
-			return fail(500, { message: 'ไม่สามารถลบสินค้าได้ อาจมีข้อมูลอื่นผูกอยู่' });
+			// ไม่ต้อง return success ก็ได้ SvelteKit จะ invalidate data และโหลดใหม่เอง
+			return; 
+		} catch (err) {
+			console.error('Failed to delete product:', err);
+			// ส่งข้อความ Error ที่ชัดเจนกลับไป
+			return fail(500, { message: 'ไม่สามารถลบสินค้าได้ อาจถูกใช้งานในบิลขายหรือข้อมูลอื่นอยู่' });
 		}
 	}
 };

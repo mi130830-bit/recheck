@@ -1,50 +1,42 @@
-<!-- Path: src/routes/products/[id]/history/+page.svelte (แก้ไขแล้ว) -->
+<!-- src/routes/products/[id]/history/+page.svelte (ปรับปรุงสำหรับ Svelte 5) -->
 <script lang="ts">
 	import type { PageData } from './$types';
 
-	export let data: PageData;
-	const { product, history } = data;
-	// END: แก้ไขชื่อตัวแปร
+	// [แก้ไข] 1. ใช้ $props() เพื่อรับข้อมูลตามมาตรฐาน Svelte 5
+	let { data } = $props<PageData>();
 
-	// --- State ใหม่สำหรับจัดการการกรอง ---
-	type FilterType = 'ALL' | 'PURCHASE_IN' | 'SALE_OUT';
-	let activeFilter: FilterType = 'ALL';
+	// [ปรับปรุง] 2. ใช้ $derived เพื่อให้ตัวแปร update อัตโนมัติตาม data
+	let product = $derived(data.product);
+	let history = $derived(data.history || []);
 
-	// --- Computed Property สำหรับกรองประวัติ ---
-	$: filteredHistory = (() => {
-		if (!history) return []; // เพิ่มการป้องกันกรณี history เป็น null/undefined
+	// [ปรับปรุง] 3. ใช้ $state สำหรับ State ที่ผู้ใช้เปลี่ยนแปลงในหน้านี้ (ตัวกรอง)
+	type FilterType = 'ALL' | 'PURCHASE_IN' | 'SALE_OUT' | 'RETURN_IN' | 'ADJUST_ADD' | 'ADJUST_SUB';
+	let activeFilter = $state<FilterType>('ALL');
+
+	// [ปรับปรุง] 4. ใช้ $derived สำหรับคำนวณข้อมูลที่เปลี่ยนแปลงตาม State อื่น (filteredHistory)
+	let filteredHistory = $derived(() => {
 		if (activeFilter === 'ALL') {
 			return history;
 		}
 		return history.filter((item) => item.type === activeFilter);
 	})();
 
-	// ฟังก์ชันสำหรับแปลงประเภทการเคลื่อนไหวเป็นข้อความภาษาไทย
+	// --- Functions (ไม่มีการเปลี่ยนแปลง) ---
 	function formatMovementType(type: string) {
 		switch (type) {
-			case 'PURCHASE_IN':
-				return { text: 'รับเข้า (ซื้อ)', class: 'status-in' };
-			case 'SALE_OUT':
-				return { text: 'ขายออก', class: 'status-out' };
-			case 'RETURN_IN':
-				return { text: 'รับคืน', class: 'status-return' };
-			case 'ADJUST_ADD':
-				return { text: 'ปรับสต็อก (เพิ่ม)', class: 'status-adjust' };
-			case 'ADJUST_SUB':
-				return { text: 'ปรับสต็อก (ลด)', class: 'status-adjust' };
-			default:
-				return { text: type, class: '' };
+			case 'PURCHASE_IN': return { text: 'รับเข้า (ซื้อ)', class: 'status-in' };
+			case 'SALE_OUT': return { text: 'ขายออก', class: 'status-out' };
+			case 'RETURN_IN': return { text: 'รับคืน', class: 'status-return' };
+			case 'ADJUST_ADD': return { text: 'ปรับสต็อก (เพิ่ม)', class: 'status-adjust' };
+			case 'ADJUST_SUB': return { text: 'ปรับสต็อก (ลด)', class: 'status-adjust' };
+			default: return { text: type, class: '' };
 		}
 	}
 
-	// ฟังก์ชันสำหรับจัดรูปแบบวันที่
 	function formatDate(dateString: Date) {
 		return new Date(dateString).toLocaleString('th-TH', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
+			year: 'numeric', month: 'short', day: 'numeric',
+			hour: '2-digit', minute: '2-digit'
 		});
 	}
 </script>
@@ -61,7 +53,6 @@
 			<a href="/products" role="button" class="secondary"> &laquo; กลับไปหน้ารายการสินค้า </a>
 		</header>
 
-		<!-- START: เพิ่มส่วนของปุ่มกรอง -->
 		<div class="filter-controls" role="group">
 			<button class:active={activeFilter === 'ALL'} on:click={() => (activeFilter = 'ALL')}>
 				ดูทั้งหมด
@@ -73,9 +64,8 @@
 				ประวัติขายออก
 			</button>
 		</div>
-		<!-- END: เพิ่มส่วนของปุ่มกรอง -->
 
-		{#if !filteredHistory || filteredHistory.length === 0}
+		{#if filteredHistory.length === 0}
 			<p>
 				{#if activeFilter === 'ALL'}
 					ยังไม่มีประวัติการเคลื่อนไหวสำหรับสินค้าชิ้นนี้
@@ -90,9 +80,9 @@
 						<tr>
 							<th style="width: 25%;">วันที่</th>
 							<th style="width: 25%;">ประเภท</th>
-							<th style="text-align: right;">จำนวนที่เปลี่ยน</th>
-							<th style="text-align: right;">สต็อกคงเหลือ</th>
-							<th style="text-align: right;">ต้นทุน/ราคา</th>
+							<th class="right">จำนวนที่เปลี่ยน</th>
+							<th class="right">สต็อกคงเหลือ</th>
+							<th class="right">ต้นทุน/ราคา</th>
 							<th>หมายเหตุ</th>
 						</tr>
 					</thead>
@@ -108,8 +98,8 @@
 								<td class="quantity-change {item.quantityChange > 0 ? 'positive' : 'negative'}">
 									{item.quantityChange > 0 ? '+' : ''}{item.quantityChange}
 								</td>
-								<td style="text-align: right;">{item.newStockQuantity}</td>
-								<td style="text-align: right;">
+								<td class="right">{item.newStockQuantity}</td>
+								<td class="right">
 									{#if item.type === 'PURCHASE_IN'}
 										{item.costAtTime?.toFixed(2) ?? '-'} (ทุน)
 									{:else if item.type === 'SALE_OUT'}
@@ -129,89 +119,22 @@
 </main>
 
 <style>
-	.container {
-		max-width: 1100px;
-		margin: 2rem auto;
-	}
-	.page-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 2rem;
-		border-bottom: 1px solid var(--pico-muted-border-color);
-		padding-bottom: 1rem;
-	}
-	.page-header h1,
-	.page-header p {
-		margin: 0;
-	}
-	.sub-header {
-		color: var(--pico-secondary);
-		font-size: 1.1rem;
-		margin-top: 0.25rem;
-	}
-
-	/* START: สไตล์สำหรับปุ่มกรอง */
-	.filter-controls {
-		display: flex;
-		gap: 0.5rem;
-		margin-bottom: 1.5rem;
-		border: 1px solid var(--pico-form-element-border-color);
-		border-radius: var(--pico-border-radius);
-		padding: 0.25rem;
-		width: max-content;
-	}
-	.filter-controls button {
-		border: none;
-		background-color: transparent;
-		padding: 0.5rem 1rem;
-		border-radius: calc(var(--pico-border-radius) - 2px);
-		cursor: pointer;
-		font-weight: 500;
-		color: var(--pico-secondary);
-	}
-	.filter-controls button:hover {
-		background-color: var(--pico-muted-background-color);
-	}
-	.filter-controls button.active {
-		background-color: var(--pico-primary);
-		color: var(--pico-primary-inverse);
-	}
-	/* END: สไตล์สำหรับปุ่มกรอง */
-
-	.table-container {
-		overflow-x: auto;
-	}
-	.status-badge {
-		padding: 0.25rem 0.6rem;
-		border-radius: 999px;
-		font-size: 0.8rem;
-		font-weight: 600;
-		color: #fff;
-		white-space: nowrap;
-	}
-	.status-badge.status-in {
-		background-color: #28a745;
-	}
-	.status-badge.status-out {
-		background-color: #dc3545;
-	}
-	.status-badge.status-return {
-		background-color: #ffc107;
-		color: #000;
-	}
-	.status-badge.status-adjust {
-		background-color: #6c757d;
-	}
-	.quantity-change {
-		text-align: right;
-		font-weight: bold;
-	}
-	.quantity-change.positive {
-		color: var(--pico-color-green-500);
-	}
-	.quantity-change.negative {
-		color: var(--pico-color-red-600);
-	}
+	.container { max-width: 1100px; margin: 2rem auto; }
+	.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid var(--pico-muted-border-color); padding-bottom: 1rem; }
+	.page-header h1, .page-header p { margin: 0; }
+	.sub-header { color: var(--pico-secondary); font-size: 1.1rem; margin-top: 0.25rem; }
+	.filter-controls { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border: 1px solid var(--pico-form-element-border-color); border-radius: var(--pico-border-radius); padding: 0.25rem; width: max-content; }
+	.filter-controls button { border: none; background-color: transparent; padding: 0.5rem 1rem; border-radius: calc(var(--pico-border-radius) - 2px); cursor: pointer; font-weight: 500; color: var(--pico-secondary); }
+	.filter-controls button:hover { background-color: var(--pico-muted-background-color); }
+	.filter-controls button.active { background-color: var(--pico-primary); color: var(--pico-primary-inverse); }
+	.table-container { overflow-x: auto; }
+	.right { text-align: right; }
+	.status-badge { padding: 0.25rem 0.6rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; color: #fff; white-space: nowrap; }
+	.status-badge.status-in { background-color: #28a745; }
+	.status-badge.status-out { background-color: #dc3545; }
+	.status-badge.status-return { background-color: #ffc107; color: #000; }
+	.status-badge.status-adjust { background-color: #6c757d; }
+	.quantity-change { text-align: right; font-weight: bold; }
+	.quantity-change.positive { color: var(--pico-color-green-500); }
+	.quantity-change.negative { color: var(--pico-color-red-600); }
 </style>
-

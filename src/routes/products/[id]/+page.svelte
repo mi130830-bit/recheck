@@ -1,24 +1,22 @@
-<!-- src/routes/products/[id]/+page.svelte -->
-
+<!-- src/routes/products/[id]/+page.svelte (แก้ไขสำหรับ Svelte 5) -->
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { PageData, ActionData } from './$types';
 
-	export let data: PageData;
-	export let form: ActionData;
+	// [แก้ไข] ใช้ $props() เพื่อรับ data และ form ตามมาตรฐาน Svelte 5
+	let { data, form } = $props<PageData & ActionData>();
 
-	// ทำให้ข้อมูล product อัปเดตทันทีหลัง form success โดยไม่ต้อง reload
-	$: product = data.product;
+	// [ปรับปรุง] ใช้ $derived เพื่อสร้างตัวแปรที่อัปเดตอัตโนมัติตาม data ที่รับมา
+	// สะอาดกว่าการใช้ $: product = data.product
+	let product = $derived(data.product);
 </script>
 
 <div class="header-container">
 	<h1>รายละเอียดสินค้า: {product.name}</h1>
 	<div class="actions">
-		<!-- ✅ ADD Class: เพิ่มคลาสสำหรับปุ่ม Outline -->
-		<a href="/products/{product.id}/history" role="button" class="secondary outline history-btn"
-			>ดูประวัติสต็อก</a
-		>
-		<!-- ✅ ADD Class: เพิ่มคลาสสำหรับปุ่ม Solid -->
+		<a href="/products/{product.id}/history" role="button" class="secondary outline history-btn">
+			ดูประวัติสต็อก
+		</a>
 		<a href="/products/{product.id}/edit" role="button" class="edit-btn">แก้ไขข้อมูล</a>
 	</div>
 </div>
@@ -27,7 +25,11 @@
 	<!-- ส่วนรูปภาพและการอัปโหลด -->
 	<article class="image-panel">
 		<header>รูปภาพสินค้า</header>
-		<img src={product.imageUrl || '/placeholder.png'} alt={product.name} class="main-product-image" />
+		<img
+			src={product.imageUrl || '/placeholder.png'}
+			alt={product.name}
+			class="main-product-image"
+		/>
 
 		<form
 			method="POST"
@@ -35,13 +37,13 @@
 			enctype="multipart/form-data"
 			use:enhance={() => {
 				return async ({ update }) => {
-					await update({ reset: false }); // ไม่ reset form แต่ให้ SvelteKit อัปเดต `data`
+					// ไม่ reset form แต่ให้ SvelteKit อัปเดต `data` จาก load function ใหม่
+					await update({ reset: false });
 				};
 			}}
 		>
 			<label for="productImage">อัปโหลดรูปภาพใหม่</label>
 			<input type="file" id="productImage" name="productImage" accept="image/*" required />
-			<!-- ✅ ADD Class: เพิ่มคลาสสำหรับปุ่ม Submit -->
 			<button type="submit" class="submit-btn">บันทึกรูปภาพ</button>
 
 			{#if form?.success}
@@ -75,9 +77,8 @@
 	</article>
 </div>
 
-<!-- ✅ REPLACE: แทนที่ Style เดิมทั้งหมดด้วย Style ใหม่ที่มีธีมสีเขียว -->
+<!-- สไตล์ยังคงเดิม เนื่องจากออกแบบมาได้ดีและเข้ากันอยู่แล้ว -->
 <style>
-	/* === 1. المتغيراتสีหลัก === */
 	:root {
 		--mint-green: #15cb24;
 		--mint-green-hover: #26c217;
@@ -85,8 +86,6 @@
 		--text-color-on-mint: #ffffff;
 		--danger-red: #c62828;
 	}
-
-	/* === 2. Layout ส่วนหัว === */
 	.header-container {
 		display: flex;
 		justify-content: space-between;
@@ -100,13 +99,10 @@
 		display: flex;
 		gap: 0.5rem;
 	}
-
-	/* === 3. สไตล์ปุ่มบนส่วนหัว === */
 	.actions a[role='button'] {
 		border-radius: 20px;
 		font-weight: 500;
 	}
-	/* ปุ่ม Solid สีเขียว (แก้ไข) */
 	.edit-btn {
 		--pico-background-color: var(--mint-green);
 		--pico-border-color: var(--mint-green);
@@ -116,7 +112,6 @@
 		--pico-background-color: var(--mint-green-hover);
 		--pico-border-color: var(--mint-green-hover);
 	}
-	/* ปุ่ม Outline สีเขียว (ประวัติ) */
 	.history-btn {
 		--pico-background-color: transparent;
 		--pico-border-color: var(--mint-green);
@@ -127,8 +122,6 @@
 		--pico-border-color: var(--mint-green-hover);
 		--pico-color: var(--mint-green-hover);
 	}
-
-	/* === 4. Layout และ Panel หลัก === */
 	.details-grid {
 		display: grid;
 		grid-template-columns: 350px 1fr;
@@ -148,8 +141,6 @@
 		padding-bottom: 0.75rem;
 		border-bottom: 1px solid var(--pico-muted-border-color);
 	}
-
-	/* === 5. ส่วนแสดงรูปภาพและฟอร์มอัปโหลด === */
 	.main-product-image {
 		width: 100%;
 		aspect-ratio: 1 / 1;
@@ -174,8 +165,6 @@
 		background-color: var(--mint-green-hover);
 		border-color: var(--mint-green-hover);
 	}
-
-	/* === 6. ส่วนแสดงข้อมูลสินค้า === */
 	.info-grid {
 		display: grid;
 		grid-template-columns: 150px 1fr;
@@ -186,8 +175,6 @@
 		color: var(--pico-h6-color);
 		font-weight: 600;
 	}
-
-	/* === 7. ข้อความแจ้งเตือน === */
 	.success-message {
 		padding-top: 0.5rem;
 		text-align: center;

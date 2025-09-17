@@ -1,33 +1,30 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	// 1. ลบ createEventDispatcher ออก
+	// import { createEventDispatcher } from 'svelte';
 
-	export let showModal: boolean;
-	export let newOrderId: number | null;
+	// 2. เพิ่ม oncloseAndReset ใน $props
+	let { showModal, newOrderId, oncloseAndReset } = $props<{
+		showModal: boolean;
+		newOrderId: number | null;
+		oncloseAndReset: () => void;
+	}>();
 
-	const dispatch = createEventDispatcher();
-
-	function handleCloseAndReset() {
-		// ส่ง event แจ้งให้ Page หลักทำงานปิด Modal และ Reset ค่าต่างๆ
-		dispatch('closeAndReset');
-	}
+	// 3. ลบฟังก์ชัน handleCloseAndReset ออกไปได้เลย
 </script>
 
 {#if showModal}
 	<dialog open>
 		<article>
 			<header>
-				<a href="#close" aria-label="Close" class="close" on:click|preventDefault={handleCloseAndReset}></a>
+				<a href="#close" aria-label="Close" class="close" on:click|preventDefault={oncloseAndReset}></a>
 				<strong>✅ บันทึกการขายสำเร็จ!</strong>
 			</header>
 			<p>คุณต้องการพิมพ์ใบเสร็จหรือไม่?</p>
 			<footer>
 				<div class="grid">
-					<a href="/receipts/{newOrderId}?size=a4" target="_blank" role="button" class="secondary">พิมพ์ (A4)</a>
-					<a href="/receipts/{newOrderId}?size=a5" target="_blank" role="button" class="secondary">พิมพ์ (A5)</a>
-					<a href="/receipts/{newOrderId}?size=slip" target="_blank" role="button" class="secondary outline">พิมพ์ (สลิป)</a>
-				</div>
+					</div>
 				<hr />
-				<button on:click={handleCloseAndReset}>เริ่มการขายใหม่</button>
+				<button on:click={oncloseAndReset}>เริ่มการขายใหม่</button>
 			</footer>
 		</article>
 	</dialog>
